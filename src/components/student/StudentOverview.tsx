@@ -11,6 +11,8 @@ import {
   ArrowRight,
   MessageSquare,
 } from 'lucide-react';
+import { calculateStudentFeeSummary } from '../../utils/feeCalculator';
+import { getOrdinalBangla } from '../../utils/meritCalculator';
 
 export const StudentOverview: React.FC = () => {
   const { currentStudent, homework, attendance, feePayments, examResults, setActiveStudentTab } = useMadrasa();
@@ -23,10 +25,9 @@ export const StudentOverview: React.FC = () => {
   // Student attendance status for today
   const todayAtt = attendance.find((a) => a.studentId === currentStudent.id);
 
-  // Fee dues
-  const studentPayments = feePayments.filter((f) => f.studentId === currentStudent.id);
-  const pendingPayment = studentPayments.find((f) => f.status === 'pending');
-  const latestApprovedPayment = studentPayments.find((f) => f.status === 'approved');
+  // Fee summary & dues calculation
+  const feeSummary = calculateStudentFeeSummary(currentStudent, feePayments);
+  const pendingPayment = feePayments.find((f) => f.studentId === currentStudent.id && f.status === 'pending');
 
   // Exam result
   const latestResult = examResults.find((r) => r.studentId === currentStudent.id);
@@ -78,22 +79,51 @@ export const StudentOverview: React.FC = () => {
           </div>
         </div>
 
-        {/* Monthly Fee Status */}
-        <div className="bg-white p-5 rounded-3xl shadow-xs border border-slate-200 flex items-center justify-between">
+        {/* Monthly Fee & Due Status Card */}
+        <div
+          onClick={() => setActiveStudentTab('fees')}
+          className={`p-5 rounded-3xl shadow-xs border flex items-center justify-between cursor-pointer transition-all hover:shadow-md ${
+            feeSummary.hasDue
+              ? 'bg-rose-50/80 border-rose-200 hover:border-rose-300'
+              : 'bg-white border-slate-200 hover:border-slate-300'
+          }`}
+        >
           <div>
-            <span className="text-xs text-slate-400 font-semibold block">মাসিক বেতন ও ফি</span>
-            <span className="text-lg font-bold text-slate-900 mt-1 block">
-              {pendingPayment
-                ? 'অনুমোদন প্রক্রিয়াধীন'
-                : latestApprovedPayment
-                ? 'পরিশোধিত (Paid)'
-                : 'পরিশোধ করুন'}
+            <span className="text-xs font-semibold block flex items-center gap-1">
+              {feeSummary.hasDue ? (
+                <span className="text-rose-700 font-bold">বকেয়া বেতন ও ফি</span>
+              ) : (
+                <span className="text-slate-400">মাসিক বেতন ও ফি</span>
+              )}
             </span>
-            <span className="text-[11px] text-amber-600 font-medium">
-              মাসিক ফি: ৳{currentStudent.monthlyFee}
+            <span
+              className={`text-lg font-bold mt-1 block font-mono ${
+                feeSummary.hasDue ? 'text-rose-700' : 'text-slate-900'
+              }`}
+            >
+              {feeSummary.hasDue
+                ? `বকেয়া: ৳${feeSummary.totalDue.toLocaleString('en-IN')}/-`
+                : pendingPayment
+                ? 'অনুমোদনাধীন'
+                : 'সব পরিশোধিত ✓'}
+            </span>
+            <span
+              className={`text-[11px] font-medium block ${
+                feeSummary.hasDue ? 'text-rose-600' : 'text-amber-600'
+              }`}
+            >
+              {feeSummary.hasDue
+                ? `${feeSummary.dueMonthsCount} টি মাসের ফি বকেয়া (বিস্তারিত দেখুন)`
+                : `নির্ধারিত ফি: ৳${feeSummary.monthlyFee.toLocaleString('en-IN')}/মাস`}
             </span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+          <div
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+              feeSummary.hasDue
+                ? 'bg-rose-100 text-rose-700'
+                : 'bg-amber-100 text-amber-700'
+            }`}
+          >
             <CreditCard className="w-6 h-6" />
           </div>
         </div>
@@ -103,7 +133,7 @@ export const StudentOverview: React.FC = () => {
           <div>
             <span className="text-xs text-slate-400 font-semibold block">সর্বশেষ মেধা স্থান</span>
             <span className="text-2xl font-black text-slate-900 mt-1 block font-mono">
-              {latestResult ? `${latestResult.positionInClass}ম স্থান` : 'শীঘ্রই আসছে'}
+              {latestResult ? `${getOrdinalBangla(latestResult.positionInClass)} স্থান` : 'শীঘ্রই আসছে'}
             </span>
             <span className="text-[11px] text-blue-700 font-medium">
               গ্রেড: {latestResult?.overallGrade || 'A+'} ({latestResult?.overallArabicGrade || 'মুমতাজ'})

@@ -13,15 +13,18 @@ import {
   Sparkles,
   ArrowRight,
   ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { printReceipt, downloadReceiptImage, generateReceiptHtml } from '../../utils/receiptPrinter';
+import { calculateStudentFeeSummary, MonthFeeStatus } from '../../utils/feeCalculator';
 
 export const StudentFees: React.FC = () => {
   const { currentStudent, feePayments, submitFeePayment, madrasaInfo } = useMadrasa();
 
   // Payment Modal State
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState('মার্চ ২০২৬');
+  const [selectedMonth, setSelectedMonth] = useState('সেপ্টেম্বর ২০২৬');
   const [amount, setAmount] = useState(currentStudent?.monthlyFee || 4000);
   const [paymentMethod, setPaymentMethod] = useState<'bkash' | 'nagad' | 'bank'>('bkash');
   const [senderNumber, setSenderNumber] = useState('');
@@ -34,6 +37,13 @@ export const StudentFees: React.FC = () => {
   if (!currentStudent) return null;
 
   const myPayments = feePayments.filter((p) => p.studentId === currentStudent.id);
+  const feeSummary = calculateStudentFeeSummary(currentStudent, feePayments);
+
+  const handlePaySpecificMonth = (monthWithYear: string, feeAmount: number) => {
+    setSelectedMonth(monthWithYear);
+    setAmount(feeAmount);
+    setIsPayModalOpen(true);
+  };
 
   const handlePaySubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,58 +67,47 @@ export const StudentFees: React.FC = () => {
     setTransactionId('');
   };
 
-  const handlePrintReceipt = () => {
-    const printContent = document.getElementById('printable-receipt');
-    if (!printContent) {
+  // Receipt States
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  const handlePrintReceipt = async () => {
+    if (!receiptToPrint) return;
+    setIsPrinting(true);
+    try {
+      await printReceipt(receiptToPrint, madrasaInfo, feeSummary.totalDue, feeSummary.dueMonths.join(', '));
+    } catch (err) {
+      console.error(err);
       window.print();
-      return;
+    } finally {
+      setIsPrinting(false);
     }
-    
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-    
-    const iframeDoc = iframe.contentWindow?.document;
-    if (iframeDoc) {
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>মানি রসিদ</title>
-            <script src="https://cdn.tailwindcss.com"></script>
-            <style>
-              @import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-              body { font-family: sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            </style>
-          </head>
-          <body class="bg-white p-8">
-            <div class="max-w-md mx-auto border border-slate-300 p-6 rounded-xl text-black">
-              ${printContent.innerHTML}
-            </div>
-            <script>
-              // Wait for Tailwind to process
-              setTimeout(() => {
-                window.print();
-              }, 1000);
-            </script>
-          </body>
-        </html>
-      `);
-      iframeDoc.close();
-      
-      setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe);
-        }
-      }, 120000); // Remove after 2 minutes
+  };
+
+  const handleDownloadReceiptImage = async () => {
+    if (!receiptToPrint) return;
+    setIsDownloading(true);
+    try {
+      await downloadReceiptImage(receiptToPrint, madrasaInfo, feeSummary.totalDue, feeSummary.dueMonths.join(', '));
+      confetti({ particleCount: 40, spread: 40, origin: { y: 0.7 } });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleOpenReceiptNewTab = () => {
+    if (!receiptToPrint) return;
+    const html = generateReceiptHtml(receiptToPrint, madrasaInfo, feeSummary.totalDue, feeSummary.dueMonths.join(', '));
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
+      win.focus();
     } else {
-      window.print();
+      handlePrintReceipt();
     }
   };
 
@@ -122,20 +121,243 @@ export const StudentFees: React.FC = () => {
             বেতন ও ফি ব্যবস্থাপনা
           </span>
           <h2 className="text-2xl font-bold">
-            {currentStudent.nameBangla} — মাসিক বেতন হিসাব
+            {currentStudent.nameBangla} — মাসিক বেতন ও বকেয়া হিসাব
           </h2>
           <p className="text-xs text-blue-200">
-            শ্রেণি: {currentStudent.className} • নির্ধারিত মাসিক ফি: ৳{currentStudent.monthlyFee}/- (আবাসিক/অনাবাসিক)
+            শ্রেণি: {currentStudent.className} • রোল: {currentStudent.roll} • নির্ধারিত মাসিক ফি: ৳{feeSummary.monthlyFee.toLocaleString('en-IN')}/-
           </p>
         </div>
 
         <button
-          onClick={() => setIsPayModalOpen(true)}
+          onClick={() => {
+            setSelectedMonth('সেপ্টেম্বর ২০২৬');
+            setIsPayModalOpen(true);
+          }}
           className="bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold px-6 py-3 rounded-2xl text-xs sm:text-sm shadow-lg transition flex items-center gap-2 shrink-0"
         >
           <CreditCard className="w-4 h-4" />
           অনলাইনে ফি জমা দিন
         </button>
+      </div>
+
+      {/* Dues & Payment Overview Stats (যেখানে বকেয়া টাকার স্পষ্ট হিসাব দেখা যাবে) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* বকেয়া টাকা কার্ড */}
+        <div
+          id="due-fee-status-card"
+          className={`p-5 rounded-3xl border transition-all ${
+            feeSummary.hasDue
+              ? 'bg-rose-50 border-rose-300 text-rose-950 shadow-sm'
+              : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+          }`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+              {feeSummary.hasDue ? (
+                <>
+                  <AlertCircle className="w-4 h-4 text-rose-600 animate-pulse" />
+                  <span className="text-rose-700">বকেয়া ফি (Due Balance)</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span className="text-emerald-700">বকেয়া স্থিতি (All Clear)</span>
+                </>
+              )}
+            </span>
+            <span
+              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                feeSummary.hasDue
+                  ? 'bg-rose-200 text-rose-800'
+                  : 'bg-emerald-200 text-emerald-800'
+              }`}
+            >
+              {feeSummary.hasDue ? `${feeSummary.dueMonthsCount} মাস বকেয়া` : 'কোনো বকেয়া নেই'}
+            </span>
+          </div>
+
+          <div className="text-2xl sm:text-3xl font-extrabold tracking-tight mt-1 font-mono">
+            ৳{feeSummary.totalDue.toLocaleString('en-IN')}/-
+          </div>
+
+          <p className="text-xs mt-2 font-medium leading-relaxed opacity-90">
+            {feeSummary.hasDue ? (
+              <span className="text-rose-700 font-semibold">
+                বকেয়া মাসসমূহ: {feeSummary.dueMonths.join(', ')}
+              </span>
+            ) : (
+              <span className="text-emerald-700">
+                চলতি সেপ্টেম্বর ২০২৬ পর্যন্ত সকল মাসিক ফি সফলভাবে পরিশোধিত রয়েছে।
+              </span>
+            )}
+          </p>
+
+          {feeSummary.hasDue && (
+            <button
+              onClick={() => {
+                if (feeSummary.dueMonths.length > 0) {
+                  handlePaySpecificMonth(`${feeSummary.dueMonths[0]} ২০২৬`, feeSummary.monthlyFee);
+                } else {
+                  setIsPayModalOpen(true);
+                }
+              }}
+              className="mt-3 w-full bg-rose-600 hover:bg-rose-700 text-white font-bold py-2 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow-sm"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              বকেয়া ফি এখনই পরিশোধ করুন
+            </button>
+          )}
+        </div>
+
+        {/* পরিশোধিত ফি কার্ড */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-blue-600" />
+              পরিশোধিত ফি (Paid)
+            </span>
+            <span className="text-[11px] font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full">
+              {feeSummary.paidMonthsCount} টি মাস
+            </span>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1 font-mono">
+            ৳{feeSummary.totalPaid.toLocaleString('en-IN')}/-
+          </div>
+          <p className="text-xs text-slate-500 mt-2 font-medium">
+            যাচাইকৃত ও অনুমোদিত রসিদভুক্ত মোট আদায়কৃত বেতন।
+          </p>
+        </div>
+
+        {/* যাচাইাধীন / অপেক্ষমাণ ফি কার্ড */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1.5">
+              <Clock className="w-4 h-4 text-amber-500" />
+              অনুমোদনের অপেক্ষায় (Pending)
+            </span>
+            <span className="text-[11px] font-bold bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full">
+              {feeSummary.pendingMonthsCount} টি
+            </span>
+          </div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1 font-mono">
+            ৳{feeSummary.totalPending.toLocaleString('en-IN')}/-
+          </div>
+          <p className="text-xs text-slate-500 mt-2 font-medium">
+            {feeSummary.pendingMonthsCount > 0
+              ? `মাস: ${feeSummary.pendingMonths.join(', ')} (অফিস থেকে যাচাই চলছে)`
+              : 'বর্তমানে কোনো আবেদন অপেক্ষমাণ নেই।'}
+          </p>
+        </div>
+      </div>
+
+      {/* ২০২৬ শিক্ষাবর্ষের ১২ মাসের ফি ও বকেয়া লেজার বিবরণী (Month-by-Month Status) */}
+      <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-teal-600" />
+              চলতি শিক্ষাবর্ষ ২০২৬ এর ১২ মাসের ফি স্থিতি ও বকেয়া খতিয়ান
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              প্রতিটি মাসের পেমেন্ট স্থিতি দেখুন এবং বকেয়া থাকলে সরাসরি পরিশোধ করুন
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="inline-flex items-center gap-1 text-emerald-700">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> পরিশোধিত
+            </span>
+            <span className="inline-flex items-center gap-1 text-rose-700">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> বকেয়া
+            </span>
+            <span className="inline-flex items-center gap-1 text-amber-600">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400"></span> অপেক্ষমাণ
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-1">
+          {feeSummary.monthsStatus.map((m) => {
+            const isPaid = m.status === 'paid';
+            const isPending = m.status === 'pending';
+            const isDue = m.status === 'due';
+            const isUpcoming = m.status === 'upcoming';
+
+            return (
+              <div
+                key={m.month}
+                className={`p-3.5 rounded-2xl border transition-all flex flex-col justify-between min-h-[125px] ${
+                  isPaid
+                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                    : isDue
+                    ? 'bg-rose-50 border-rose-300 text-rose-950 shadow-xs ring-1 ring-rose-200'
+                    : isPending
+                    ? 'bg-amber-50/80 border-amber-300 text-amber-950'
+                    : 'bg-slate-50/70 border-slate-200 text-slate-600'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs">{m.month}</span>
+                    {isPaid && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                    {isDue && <AlertCircle className="w-3.5 h-3.5 text-rose-600" />}
+                    {isPending && <Clock className="w-3.5 h-3.5 text-amber-600" />}
+                  </div>
+                  <div className="text-[11px] font-mono mt-0.5 opacity-80">
+                    ৳{m.amount.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-black/5">
+                  {isPaid && (
+                    <div className="space-y-1.5">
+                      <span className="inline-block text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                        পরিশোধিত ✓
+                      </span>
+                      {m.payment && (
+                        <button
+                          onClick={() => setReceiptToPrint(m.payment!)}
+                          className="w-full text-center text-[10px] font-bold text-emerald-800 hover:text-emerald-900 bg-white hover:bg-emerald-100/50 py-1 rounded-md border border-emerald-300 transition flex items-center justify-center gap-1"
+                        >
+                          <Printer className="w-2.5 h-2.5" /> রসিদ
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {isDue && (
+                    <div className="space-y-1.5">
+                      <span className="inline-block text-[10px] font-bold bg-rose-200 text-rose-800 px-2 py-0.5 rounded-md">
+                        বকেয়া বাকি ✗
+                      </span>
+                      <button
+                        onClick={() => handlePaySpecificMonth(m.monthWithYear, m.amount)}
+                        className="w-full text-center text-[10px] font-bold text-white bg-rose-600 hover:bg-rose-700 py-1 rounded-md transition shadow-xs flex items-center justify-center gap-0.5"
+                      >
+                        জমা দিন
+                      </button>
+                    </div>
+                  )}
+
+                  {isPending && (
+                    <div>
+                      <span className="inline-block text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                        যাচাইাধীন ⏳
+                      </span>
+                    </div>
+                  )}
+
+                  {isUpcoming && (
+                    <div>
+                      <span className="inline-block text-[10px] font-medium bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">
+                        আসন্ন মাস
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Payment History Table */}
@@ -466,17 +688,43 @@ export const StudentFees: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-slate-100 p-4 flex justify-between border-t border-slate-200 print:hidden">
+            <div className="bg-slate-100 p-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 print:hidden">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handlePrintReceipt}
+                  disabled={isPrinting}
+                  className="bg-blue-700 hover:bg-blue-800 active:scale-95 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <Printer className="w-4 h-4" />
+                  {isPrinting ? 'প্রিন্ট হচ্ছে...' : 'রসিদ প্রিন্ট করুন'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadReceiptImage}
+                  disabled={isDownloading}
+                  className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-xs transition"
+                >
+                  <Download className="w-4 h-4" />
+                  {isDownloading ? 'ডাউনলোড হচ্ছে...' : 'রসিদ ডাউনলোড (ছবি)'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenReceiptNewTab}
+                  className="bg-slate-700 hover:bg-slate-800 active:scale-95 text-white font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition"
+                  title="আলাদা উইন্ডোতে রসিদ খুলুন"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  নতুন ট্যাবে
+                </button>
+              </div>
+
               <button
-                onClick={handlePrintReceipt}
-                className="bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5"
-              >
-                <Printer className="w-4 h-4" />
-                রসিদ প্রিন্ট করুন
-              </button>
-              <button
+                type="button"
                 onClick={() => setReceiptToPrint(null)}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-xl text-xs"
+                className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold px-4 py-2 rounded-xl text-xs ml-auto"
               >
                 বন্ধ করুন
               </button>

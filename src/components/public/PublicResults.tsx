@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { ExamResult } from '../../types';
+import { getOrdinalBangla } from '../../utils/meritCalculator';
 import {
   Award,
   Search,
@@ -169,7 +170,7 @@ export const PublicResults: React.FC = () => {
                 <div>
                   <span className="text-slate-400 block text-[10px]">রোল ও মেধাক্রম:</span>
                   <span className="font-bold text-blue-700">
-                    রোল: {searchedResult.roll} (মেধা স্থান: {searchedResult.positionInClass})
+                    রোল: {searchedResult.roll} (মেধা স্থান: {getOrdinalBangla(searchedResult.positionInClass)} স্থান)
                   </span>
                 </div>
               </div>
@@ -222,8 +223,8 @@ export const PublicResults: React.FC = () => {
                 </table>
               </div>
 
-              {/* Remarks */}
-              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 text-xs text-slate-700">
+              {/* Remarks (Excluded on paper print) */}
+              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 text-xs text-slate-700 no-print print:hidden">
                 <span className="font-bold text-blue-900 block mb-1">মুহতামিম ও শিক্ষকের মূল্যায়ন:</span>
                 <p className="italic">"{searchedResult.generalRemarks}"</p>
               </div>

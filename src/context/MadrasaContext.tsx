@@ -44,6 +44,7 @@ import {
 } from '../data/initialData';
 import { getHijriDateString } from '../utils/hijriDate';
 import { getTranslation, translations } from '../utils/translations';
+import { calculateMeritPositions } from '../utils/meritCalculator';
 import {
   getCollectionData,
   getSingleDoc,
@@ -197,6 +198,7 @@ interface MadrasaContextType {
   addExamResult?: (result: Omit<ExamResult, 'id'> | ExamResult) => ExamResult;
   updateExamResult: (result: ExamResult) => void;
   deleteExamResult: (id: string) => void;
+  recalculateAllMeritPositions: () => number;
 
   // Fees & Finance
   submitFeePayment: (payment: Omit<FeePayment, 'id' | 'status' | 'receiptNo' | 'paymentDate'>) => FeePayment;
@@ -347,7 +349,10 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => loadFromStorage('attendance', initialAttendance));
   const [homework, setHomework] = useState<DailyHomework[]>(() => loadFromStorage('homework', initialHomework));
   const [feePayments, setFeePayments] = useState<FeePayment[]>(() => loadFromStorage('fee_payments', initialFeePayments));
-  const [examResults, setExamResults] = useState<ExamResult[]>(() => loadFromStorage('exam_results', initialExamResults));
+  const [examResults, setExamResults] = useState<ExamResult[]>(() => {
+    const loaded = loadFromStorage('exam_results', initialExamResults);
+    return calculateMeritPositions(loaded);
+  });
   const [notices, setNotices] = useState<Notice[]>(() => loadFromStorage('notices', initialNotices));
   const [mediaEvents, setMediaEvents] = useState<MediaEvent[]>(() => loadFromStorage('media_events', initialMediaEvents));
   const [complaints, setComplaints] = useState<ComplaintMessage[]>(() => loadFromStorage('complaints', initialComplaints));
@@ -1135,25 +1140,51 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     deleteDocFromFirestore('homework', id);
   };
 
-  // Exam Results
+  // Exam Results with Automatic Merit Position Determination based on Marks
   const publishExamResult = (result: Omit<ExamResult, 'id'>): ExamResult => {
     const newRes: ExamResult = {
       ...result,
       id: `res-${Date.now()}`,
     };
-    setExamResults((prev) => [newRes, ...prev]);
-    saveDocToFirestore('exam_results', newRes.id, newRes);
-    return newRes;
+    const combined = [newRes, ...examResults.filter((r) => r.id !== newRes.id)];
+    const ranked = calculateMeritPositions(combined);
+    setExamResults(ranked);
+    
+    // Save all affected results to persistent storage / Firestore
+    ranked.forEach((r) => {
+      saveDocToFirestore('exam_results', r.id, r);
+    });
+
+    const finalNewRes = ranked.find((r) => r.id === newRes.id) || newRes;
+    return finalNewRes;
   };
 
   const updateExamResult = (result: ExamResult) => {
-    setExamResults((prev) => prev.map((r) => (r.id === result.id ? result : r)));
-    saveDocToFirestore('exam_results', result.id, result);
+    const updated = examResults.map((r) => (r.id === result.id ? result : r));
+    const ranked = calculateMeritPositions(updated);
+    setExamResults(ranked);
+    ranked.forEach((r) => {
+      saveDocToFirestore('exam_results', r.id, r);
+    });
   };
 
   const deleteExamResult = (id: string) => {
-    setExamResults((prev) => prev.filter((r) => r.id !== id));
+    const filtered = examResults.filter((r) => r.id !== id);
+    const ranked = calculateMeritPositions(filtered);
+    setExamResults(ranked);
     deleteDocFromFirestore('exam_results', id);
+    ranked.forEach((r) => {
+      saveDocToFirestore('exam_results', r.id, r);
+    });
+  };
+
+  const recalculateAllMeritPositions = (): number => {
+    const ranked = calculateMeritPositions(examResults);
+    setExamResults(ranked);
+    ranked.forEach((r) => {
+      saveDocToFirestore('exam_results', r.id, r);
+    });
+    return ranked.length;
   };
 
   // Fees
@@ -1686,6 +1717,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addExamResult: publishExamResult,
         updateExamResult,
         deleteExamResult,
+        recalculateAllMeritPositions,
         submitFeePayment,
         approveFeePayment,
         rejectFeePayment,

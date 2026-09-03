@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { ExamResult } from '../../types';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
+import { ClassResultTabulationSheet } from './ClassResultTabulationSheet';
 import { exportResultsToExcel } from '../../utils/excelService';
+import { getOrdinalBangla, previewMeritPosition } from '../../utils/meritCalculator';
+import { printHtmlElement } from '../../utils/printHelper';
 import {
   Award,
   Plus,
@@ -17,6 +20,13 @@ import {
   CheckCircle2,
   FileSpreadsheet,
   Download,
+  Sparkles,
+  Trophy,
+  Medal,
+  Calculator,
+  Pencil,
+  Layers,
+  SlidersHorizontal,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -28,11 +38,16 @@ export const AdminResults: React.FC = () => {
     addExamResult,
     updateExamResult,
     deleteExamResult,
+    recalculateAllMeritPositions,
     madrasaInfo,
   } = useMadrasa();
 
   const [selectedExamType, setSelectedExamType] = useState('first_term');
   const [selectedClassId, setSelectedClassId] = useState(classes[0]?.id || 'cls-madani-1');
+
+  // Full Class Offline Result Tabulation Sheet / Batch Print Modal
+  const [isTabulationModalOpen, setIsTabulationModalOpen] = useState(false);
+  const [tabulationModalMode, setTabulationModalMode] = useState<'tabulation' | 'batch_marksheet'>('tabulation');
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,8 +64,11 @@ export const AdminResults: React.FC = () => {
   const [modalClassId, setModalClassId] = useState(selectedClassId);
   const [studentId, setStudentId] = useState('');
   const [examName, setExamName] = useState('১ম সাময়িক পরীক্ষা ২০২৬');
-  const [positionInClass, setPositionInClass] = useState(1);
-  const [generalRemarks, setGeneralRemarks] = useState('মাশাআল্লাহ, পড়াশোনা ও আমলে সন্তোষজনক অগ্রগতি।');
+  const [generalRemarks, setGeneralRemarks] = useState('');
+
+  // Ranking Mode inside Modal (auto based on marks vs manual custom)
+  const [rankingMode, setRankingMode] = useState<'auto' | 'manual'>('auto');
+  const [manualPositionInClass, setManualPositionInClass] = useState<number>(1);
 
   // Subject marks state
   const [subjectsList, setSubjectsList] = useState<
@@ -63,9 +81,26 @@ export const AdminResults: React.FC = () => {
   const modalClassStudents = students.filter((s) => s.classId === modalClassId);
   const currentModalClass = classes.find((c) => c.id === modalClassId);
 
-  // Filtered results for the list view
-  const filteredResults = examResults.filter(
-    (r) => r.examType === selectedExamType && r.classId === selectedClassId
+  // Filtered results for the list view - sorted by merit position / marks
+  const filteredResults = examResults
+    .filter((r) => r.examType === selectedExamType && r.classId === selectedClassId)
+    .sort((a, b) => {
+      if (a.positionInClass && b.positionInClass) {
+        return a.positionInClass - b.positionInClass;
+      }
+      return (b.totalMarksObtained || 0) - (a.totalMarksObtained || 0);
+    });
+
+  // Modal live calculations
+  const modalTotalObtained = subjectsList.reduce((acc, sub) => acc + (Number(sub.obtainedMarks) || 0), 0);
+  const modalTotalPossible = subjectsList.reduce((acc, sub) => acc + (Number(sub.fullMarks) || 0), 0);
+  const modalPercentage = modalTotalPossible > 0 ? (modalTotalObtained / modalTotalPossible) * 100 : 0;
+  const modalMeritPreview = previewMeritPosition(
+    modalClassId,
+    examName,
+    studentId,
+    modalTotalObtained,
+    examResults
   );
 
   const calculateSubjectGrade = (obtained: number, full: number) => {
@@ -113,9 +148,29 @@ export const AdminResults: React.FC = () => {
         ? 'অর্ধ-বার্ষিক পরীক্ষা ২০২৬'
         : 'বার্ষিক পরীক্ষা ২০২৬'
     );
-    setPositionInClass(filteredResults.length + 1);
-    setGeneralRemarks('মাশাআল্লাহ, ভালো ফলাফল। ইলমে দ্বীনে বরকত দান করুন।');
+    setGeneralRemarks('');
     setSubjectsList(loadKitabsForClass(initialClassId));
+    setRankingMode('auto');
+    setManualPositionInClass(1);
+    setIsModalOpen(true);
+  };
+
+  const handleEditResult = (res: ExamResult) => {
+    setEditingResultId(res.id);
+    setModalClassId(res.classId);
+    setStudentId(res.studentId);
+    setExamName(res.examName);
+    setGeneralRemarks(res.generalRemarks || '');
+    setSubjectsList(
+      res.subjects.map((s) => ({
+        subjectName: s.subjectName,
+        fullMarks: s.fullMarks,
+        obtainedMarks: s.obtainedMarks,
+        passMarks: s.passMarks || 40,
+      }))
+    );
+    setRankingMode(res.isManualPosition ? 'manual' : 'auto');
+    setManualPositionInClass(res.positionInClass || 1);
     setIsModalOpen(true);
   };
 
@@ -167,6 +222,11 @@ export const AdminResults: React.FC = () => {
         ? { grade: 'B', arabic: 'মাকবুল (৩য় বিভাগ)' }
         : { grade: 'F', arabic: 'রাসিব (অকৃতকার্য)' };
 
+    const finalPosition =
+      rankingMode === 'manual'
+        ? Number(manualPositionInClass) || 1
+        : modalMeritPreview.predictedRank || 1;
+
     const resultData: ExamResult = {
       id: editingResultId || `res-${Date.now()}`,
       studentId: studentId.trim(),
@@ -183,20 +243,25 @@ export const AdminResults: React.FC = () => {
       overallGrade: overall.grade,
       overallArabicGrade: overall.arabic,
       cgpa: avgGpa,
-      positionInClass: Number(positionInClass),
+      positionInClass: finalPosition,
+      isManualPosition: rankingMode === 'manual',
       subjects: calculatedSubjects,
       generalRemarks: generalRemarks.trim(),
     };
 
     if (editingResultId) {
       updateExamResult(resultData);
-      alert('ফলাফল সফলভাবে আপডেট হয়েছে!');
+      showToast('ফলাফল সফলভাবে আপডেট হয়েছে এবং মেধাস্থান সংরক্ষিত হয়েছে!');
     } else {
       if (addExamResult) {
         addExamResult(resultData);
       }
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
-      alert('নতুন পরীক্ষার ফলাফল সফলভাবে প্রকাশ করা হয়েছে!');
+      showToast(
+        rankingMode === 'manual'
+          ? 'নতুন ফলাফল ও কাস্টম মেধাস্থান সফলভাবে সংরক্ষিত হয়েছে!'
+          : 'নতুন পরীক্ষার ফলাফল প্রকাশিত হয়েছে এবং প্রাপ্ত নম্বরের ভিত্তিতে মেধাস্থান স্বয়ংক্রিয়ভাবে নির্ধারণ করা হয়েছে!'
+      );
     }
 
     setIsModalOpen(false);
@@ -218,18 +283,57 @@ export const AdminResults: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Offline Class Tabulation Broadsheet */}
+            <button
+              onClick={() => {
+                setTabulationModalMode('tabulation');
+                setIsTabulationModalOpen(true);
+              }}
+              className="bg-indigo-900 hover:bg-indigo-950 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              title="নির্দিষ্ট জামাতের সকল শিক্ষার্থীর বিষয়ভিত্তিক পূর্ণাঙ্গ ফলাফল ও ট্যাবুলেশন শিট অফলাইনে প্রিন্ট করুন"
+            >
+              <Layers className="w-4 h-4 text-amber-300" />
+              <span>জামাতের ট্যাবুলেশন শিট</span>
+            </button>
+
+            {/* 2. Offline Batch Marksheets Print */}
+            <button
+              onClick={() => {
+                setTabulationModalMode('batch_marksheet');
+                setIsTabulationModalOpen(true);
+              }}
+              className="bg-blue-800 hover:bg-blue-900 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              title="নির্দিষ্ট জামাতের সকল শিক্ষার্থীর ব্যক্তিগত মার্কশিট একসাথে অফলাইনে প্রিন্ট করুন"
+            >
+              <Printer className="w-4 h-4 text-amber-300" />
+              <span>সব মার্কশিট প্রিন্ট</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const count = recalculateAllMeritPositions();
+                confetti({ particleCount: 40, spread: 50, origin: { y: 0.5 } });
+                showToast(`সফলভাবে ${count}টি পরীক্ষার ফলাফলের মেধাস্থান (১ম, ২য়, ৩য়...) প্রাপ্ত নম্বরের ভিত্তিতে স্বয়ংক্রিয়ভাবে নির্ধারণ করা হয়েছে!`);
+              }}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              title="সকল শ্রেণির শিক্ষার্থীদের প্রাপ্ত নম্বরের ভিত্তিতে মেধাস্থান (১ম, ২য়, ৩য়...) স্বয়ংক্রিয়ভাবে নির্ধারণ করুন"
+            >
+              <Sparkles className="w-4 h-4 text-slate-950" />
+              <span>অটো মেধাস্থান নির্ধারণ</span>
+            </button>
+
             <button
               onClick={() => exportResultsToExcel(examResults)}
               className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
               title="সকল ফলাফল এক্সেলে ডাউনলোড করুন"
             >
               <FileSpreadsheet className="w-4 h-4 text-amber-300" />
-              <span>ফলাফল এক্সেল ডাউনলোড</span>
+              <span>ফলাফল এক্সেল</span>
             </button>
 
             <button
               onClick={handleOpenAdd}
-              className="bg-blue-800 hover:bg-blue-900 text-white font-bold px-5 py-2.5 rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
+              className="bg-blue-900 hover:bg-blue-950 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>নতুন ফলাফল এন্ট্রি</span>
@@ -314,9 +418,28 @@ export const AdminResults: React.FC = () => {
                 {filteredResults.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50 transition">
                     <td className="p-3 text-center">
-                      <span className="w-7 h-7 rounded-full bg-blue-100 text-blue-800 font-bold font-mono inline-flex items-center justify-center">
-                        {r.positionInClass}
-                      </span>
+                      {r.positionInClass === 1 ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-100 border border-amber-300 text-amber-900 font-bold px-2.5 py-1 rounded-full text-xs shadow-2xs">
+                          ১ম স্থান
+                        </span>
+                      ) : r.positionInClass === 2 ? (
+                        <span className="inline-flex items-center gap-1 bg-slate-200 border border-slate-300 text-slate-800 font-bold px-2.5 py-1 rounded-full text-xs shadow-2xs">
+                          ২য় স্থান
+                        </span>
+                      ) : r.positionInClass === 3 ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 border border-amber-200 text-amber-800 font-bold px-2.5 py-1 rounded-full text-xs shadow-2xs">
+                          ৩য় স্থান
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 bg-blue-50 border border-blue-200 text-blue-800 font-bold px-2.5 py-1 rounded-full text-xs">
+                          {getOrdinalBangla(r.positionInClass)} স্থান
+                        </span>
+                      )}
+                      {r.isManualPosition && (
+                        <span className="block text-[9px] text-amber-700 font-bold mt-0.5">
+                          (কাস্টম)
+                        </span>
+                      )}
                     </td>
 
                     <td className="p-3">
@@ -345,6 +468,13 @@ export const AdminResults: React.FC = () => {
 
                     <td className="p-3 text-center">
                       <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => handleEditResult(r)}
+                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                          title="নম্বর ও ফলাফল এডিট করুন"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setViewingResult(r)}
                           className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition cursor-pointer"
@@ -445,7 +575,7 @@ export const AdminResults: React.FC = () => {
                 </div>
               </div>
 
-              {/* STEP 2: Exam & Ranking */}
+              {/* STEP 2: Exam & Auto Merit Ranking */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">পরীক্ষার নাম *</label>
@@ -459,16 +589,101 @@ export const AdminResults: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">শ্রেণিতে মেধা স্থান (Merit Rank) *</label>
-                  <input
-                    type="number"
-                    required
-                    min={1}
-                    value={positionInClass}
-                    onChange={(e) => setPositionInClass(Number(e.target.value))}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-bold font-mono focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                  />
+                {/* Dual-Mode Merit Rank (Auto vs Manual) */}
+                <div className="bg-linear-to-br from-amber-50 to-blue-50 border border-amber-200/80 p-3 rounded-2xl flex flex-col justify-between space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                      মেধাস্থান নির্ধারণ:
+                    </span>
+                    {/* Mode Toggle Buttons */}
+                    <div className="flex items-center bg-white/90 p-0.5 rounded-xl border border-amber-200 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setRankingMode('auto')}
+                        className={`px-2.5 py-0.5 rounded-lg font-bold text-[11px] transition cursor-pointer ${
+                          rankingMode === 'auto'
+                            ? 'bg-blue-800 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        ⚡ স্বয়ংক্রিয় (অটো)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRankingMode('manual');
+                          if (!manualPositionInClass) {
+                            setManualPositionInClass(modalMeritPreview.predictedRank || 1);
+                          }
+                        }}
+                        className={`px-2.5 py-0.5 rounded-lg font-bold text-[11px] transition cursor-pointer ${
+                          rankingMode === 'manual'
+                            ? 'bg-blue-800 text-white shadow-2xs'
+                            : 'text-slate-600 hover:text-slate-900'
+                        }`}
+                      >
+                        ✍️ ম্যানুয়াল (কাস্টম)
+                      </button>
+                    </div>
+                  </div>
+
+                  {rankingMode === 'auto' ? (
+                    <div>
+                      <div className="mt-1 flex items-baseline justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-lg font-black text-blue-950">
+                            {modalMeritPreview.ordinalBangla} স্থান
+                          </span>
+                          {modalMeritPreview.predictedRank === 1 && (
+                            <span className="text-[11px] bg-amber-500 text-white font-bold px-2 py-0.5 rounded-full shadow-2xs">
+                              ১ম স্থান
+                            </span>
+                          )}
+                          {modalMeritPreview.predictedRank === 2 && (
+                            <span className="text-[11px] bg-slate-500 text-white font-bold px-2 py-0.5 rounded-full shadow-2xs">
+                              ২য় স্থান
+                            </span>
+                          )}
+                          {modalMeritPreview.predictedRank === 3 && (
+                            <span className="text-[11px] bg-amber-700 text-white font-bold px-2 py-0.5 rounded-full shadow-2xs">
+                              ৩য় স্থান
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-mono font-bold text-slate-600">
+                          মোট প্রাপ্ত: {modalTotalObtained} / {modalTotalPossible}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        নম্বর অনুযায়ী স্বয়ংক্রিয় মেধাস্থান হিসাব হচ্ছে।
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-bold text-slate-700">কাস্টম মেধা স্থান:</span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={manualPositionInClass}
+                            onChange={(e) => setManualPositionInClass(Number(e.target.value))}
+                            className="w-16 px-2 py-1 text-center font-black font-mono text-xs bg-white border border-blue-400 rounded-lg focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="font-bold text-slate-900 text-xs">
+                            ({getOrdinalBangla(manualPositionInClass)} স্থান)
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-amber-800 font-bold bg-amber-100/80 px-2 py-0.5 rounded-md">
+                          ম্যানুয়ালি সংরক্ষিত হবে
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        কর্তৃপক্ষের বিশেষ বিবেচনায় কাস্টম মেধাস্থান সেট করতে পারেন।
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -581,10 +796,10 @@ export const AdminResults: React.FC = () => {
 
       {/* View Marksheet Modal */}
       {viewingResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 my-auto overflow-hidden animate-in fade-in zoom-in-95">
+        <div className="print-modal-active fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:static print:p-0 print:m-0 print:bg-white print:overflow-visible print:block">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 my-auto overflow-hidden animate-in fade-in zoom-in-95 print:max-h-none print:shadow-none print:border-none print:rounded-none print:w-full print:m-0 print:overflow-visible print:block">
             {/* Marksheet Modal Header */}
-            <div className="bg-blue-950 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-blue-800">
+            <div className="bg-blue-950 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-blue-800 no-print">
               <div className="flex items-center gap-2">
                 <Award className="w-5 h-5 text-amber-300" />
                 <div>
@@ -604,10 +819,14 @@ export const AdminResults: React.FC = () => {
             </div>
 
             {/* Marksheet Body */}
-            <div className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
-              <div className="text-center border-b border-slate-200 pb-3">
-                <span className="text-xs text-blue-800 font-bold block">{madrasaInfo.nameBangla}</span>
-                <h4 className="font-extrabold text-slate-900 text-base">{viewingResult.examName}</h4>
+            <div id="admin-marksheet-printable" className="p-6 space-y-4 text-xs overflow-y-auto flex-1 bg-white">
+              <div className="text-center border-b border-slate-200 pb-3 space-y-1">
+                <div className="font-['Amiri'] text-base text-slate-800 font-bold" dir="rtl">
+                  {madrasaInfo.nameArabic || 'بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ'}
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-slate-900">{madrasaInfo.nameBangla}</h3>
+                <p className="text-[11px] text-slate-600">{madrasaInfo.address || 'ঢাকা, বাংলাদেশ'} • ফোনঃ {madrasaInfo.phone || ''}</p>
+                <h4 className="font-extrabold text-blue-900 text-sm pt-1">{viewingResult.examName}</h4>
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-3 rounded-2xl text-xs text-slate-700 border border-slate-200">
@@ -625,7 +844,9 @@ export const AdminResults: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 block">মেধা স্থান</span>
-                  <strong className="text-amber-800">১ম স্থান ({viewingResult.positionInClass})</strong>
+                  <strong className="text-amber-800">
+                    {getOrdinalBangla(viewingResult.positionInClass)} স্থান
+                  </strong>
                 </div>
               </div>
 
@@ -676,10 +897,26 @@ export const AdminResults: React.FC = () => {
                   </span>
                 </div>
               </div>
+
+              {/* Signatures for Print */}
+              <div className="pt-8 grid grid-cols-3 gap-4 text-center text-xs text-slate-600">
+                <div>
+                  <div className="border-t border-slate-400 w-3/4 mx-auto mb-1"></div>
+                  <span>শ্রেণি শিক্ষকের স্বাক্ষর</span>
+                </div>
+                <div>
+                  <div className="border-t border-slate-400 w-3/4 mx-auto mb-1"></div>
+                  <span>নাজেমে তা'লীমাত</span>
+                </div>
+                <div>
+                  <div className="border-t border-slate-400 w-3/4 mx-auto mb-1"></div>
+                  <span className="font-bold text-slate-900">মুহতামিমের স্বাক্ষর ও সিল</span>
+                </div>
+              </div>
             </div>
 
             {/* Marksheet Footer with Print AND Close buttons */}
-            <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
+            <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 no-print">
               <button
                 type="button"
                 onClick={() => setViewingResult(null)}
@@ -691,7 +928,12 @@ export const AdminResults: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => window.print()}
+                onClick={() =>
+                  printHtmlElement('admin-marksheet-printable', {
+                    title: `${viewingResult.studentName} - মার্কশিট (${viewingResult.examName})`,
+                    landscape: false,
+                  })
+                }
                 className="px-6 py-2 bg-blue-800 hover:bg-blue-900 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
@@ -727,6 +969,15 @@ export const AdminResults: React.FC = () => {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Full Class Offline Result Tabulation Sheet & Batch Marksheets Modal */}
+      <ClassResultTabulationSheet
+        isOpen={isTabulationModalOpen}
+        onClose={() => setIsTabulationModalOpen(false)}
+        initialClassId={selectedClassId}
+        initialExamType={selectedExamType}
+        initialMode={tabulationModalMode}
+      />
     </div>
   );
 };

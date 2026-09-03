@@ -255,6 +255,7 @@ export interface ExamResult {
   failedSubjectsCount?: number;
   cgpa: number;
   positionInClass: number;
+  isManualPosition?: boolean;
   generalRemarks: string;
 }
 

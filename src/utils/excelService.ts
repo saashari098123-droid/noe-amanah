@@ -147,6 +147,56 @@ export function exportResultsToExcel(examResults: ExamResult[]) {
 }
 
 /**
+ * Export Class Tabulation Sheet with each subject as a distinct column
+ */
+export function exportClassTabulationExcel(
+  results: ExamResult[],
+  className: string,
+  examName: string
+) {
+  const subjectNamesSet = new Set<string>();
+  results.forEach((r) => {
+    (r.subjects || []).forEach((s) => subjectNamesSet.add(s.subjectName));
+  });
+  const subjectList = Array.from(subjectNamesSet);
+
+  const rows = results.map((r, idx) => {
+    const rowObj: Record<string, any> = {
+      'মেধা স্থান': r.positionInClass || idx + 1,
+      'রোল নং': r.roll,
+      'শিক্ষার্থীর নাম': r.studentName,
+      'ছাত্র আইডি': r.studentId,
+      'জামাত / শ্রেণি': r.className,
+    };
+
+    subjectList.forEach((subName) => {
+      const match = (r.subjects || []).find((s) => s.subjectName === subName);
+      rowObj[subName] = match ? match.obtainedMarks : '-';
+    });
+
+    rowObj['মোট প্রাপ্ত'] = r.totalMarksObtained;
+    rowObj['মোট পূর্ণমান'] = r.totalMarksPossible;
+    rowObj['শতাংশ (%)'] = `${r.percentage ? r.percentage.toFixed(1) : 0}%`;
+    rowObj['লেটার গ্রেড'] = r.overallGrade;
+    rowObj['ইসলামিক মূল্যায়ন'] = r.overallArabicGrade;
+    rowObj['সিজিপিএ'] = r.cgpa ? r.cgpa.toFixed(2) : '-';
+    rowObj['ফলাফল'] = (r.percentage || 0) >= 40 ? 'উত্তীর্ণ' : 'অনুত্তীর্ণ';
+
+    return rowObj;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'ট্যাবুলেশন শিট');
+
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const sanitizedClass = (className || 'class').replace(/\s+/g, '_');
+  const sanitizedExam = (examName || 'exam').replace(/\s+/g, '_');
+  triggerDownload(blob, `Tabulation_Sheet_${sanitizedClass}_${sanitizedExam}.xlsx`);
+}
+
+/**
  * 4. Export Complete Madrasa Database to Multi-Sheet Excel
  */
 export function exportFullMadrasaDataToExcel(data: {

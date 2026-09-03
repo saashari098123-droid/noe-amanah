@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { ExamResult } from '../../types';
+import { getOrdinalBangla } from '../../utils/meritCalculator';
 import {
   Award,
   Printer,
@@ -98,7 +99,7 @@ export const StudentResults: React.FC = () => {
             <div className="bg-blue-50/80 p-3.5 rounded-2xl border border-blue-200 text-center">
               <span className="text-slate-500 block">শ্রেণিতে মেধা স্থান:</span>
               <span className="text-xl font-black text-blue-900 font-mono">
-                {activeResult.positionInClass}ম
+                {getOrdinalBangla(activeResult.positionInClass)} স্থান
               </span>
             </div>
             <div className="bg-blue-50/80 p-3.5 rounded-2xl border border-blue-200 text-center">
@@ -169,8 +170,8 @@ export const StudentResults: React.FC = () => {
             </table>
           </div>
 
-          {/* Remarks Box */}
-          <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/60 text-xs text-amber-950">
+          {/* Remarks Box (Excluded on paper print) */}
+          <div className="bg-amber-50/70 p-4 rounded-2xl border border-amber-200/60 text-xs text-amber-950 no-print print:hidden">
             <strong className="block mb-1 text-amber-900">শ্রেণি শিক্ষক ও মুহতামিমের মন্তব্য:</strong>
             <p className="italic">"{activeResult.generalRemarks}"</p>
           </div>
