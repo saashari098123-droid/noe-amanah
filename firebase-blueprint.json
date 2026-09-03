@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "madrasa_info": {
+      "title": "Madrasa Info",
+      "description": "General settings, contact info and branding of the Madrasa",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "tagline": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" }
+      }
+    },
+    "students": {
+      "title": "Students",
+      "description": "Enrolled student records with academic and financial details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nameBangla": { "type": "string" },
+        "nameEnglish": { "type": "string" },
+        "roll": { "type": "number" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "guardianPhone": { "type": "string" },
+        "residentialStatus": { "type": "string" },
+        "monthlyFee": { "type": "number" }
+      },
+      "required": ["id", "nameBangla", "classId"]
+    },
+    "teachers": {
+      "title": "Teachers",
+      "description": "Faculty and Asataza records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nameBangla": { "type": "string" },
+        "designation": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["id", "nameBangla"]
+    },
+    "classes": {
+      "title": "Classes",
+      "description": "Academic classes and fee structure",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "department": { "type": "string" },
+        "monthlyFee": { "type": "number" }
+      },
+      "required": ["id", "name"]
+    },
+    "attendances": {
+      "title": "Attendances",
+      "description": "Daily student period attendance records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "fee_payments": {
+      "title": "Fee Payments",
+      "description": "Tuition, admission and examination fee vouchers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "receiptNo": { "type": "string" },
+        "studentId": { "type": "string" },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "exam_results": {
+      "title": "Exam Results",
+      "description": "Marksheets and examination results for all terms",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "examName": { "type": "string" },
+        "gpa": { "type": "number" }
+      }
+    },
+    "admission_applications": {
+      "title": "Admission Applications",
+      "description": "Online admission applications submitted by prospective students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "applicationNumber": { "type": "string" },
+        "applicantNameBangla": { "type": "string" },
+        "guardianPhone": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "notices": {
+      "title": "Notices",
+      "description": "Official announcements, notices and holiday alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "date": { "type": "string" }
+      }
+    },
+    "media_events": {
+      "title": "Media Events",
+      "description": "Photo and video event gallery records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    }
+  }
+}

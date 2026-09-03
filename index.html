@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        try {
+          var _fetch = window.fetch ? window.fetch.bind(window) : undefined;
+          Object.defineProperty(window, 'fetch', {
+            get: function() { return _fetch; },
+            set: function(fn) { _fetch = fn; },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          // fallback if defineProperty fails
+        }
+      })();
+    </script>
+    <title>Remix Darul Amanah Al Islamia Madrasa</title>
+    <meta name="description" content="দারুল আমানাহ আল ইসলামিয়া মাদরাসার পূর্ণাঙ্গ অনলাইন ম্যানেজমেন্ট সিস্টেম ও ওয়েবসাইট - সাধারণ দর্শক পোর্টাল, ছাত্র-অভিভাবক ড্যাশবোর্ড, শিক্ষক ড্যাশবোর্ড ও সুপার অ্যাডমিন কন্ট্রোল প্যানেল।" />
+    <meta property="og:title" content="Remix Darul Amanah Al Islamia Madrasa" />
+    <meta property="og:description" content="দারুল আমানাহ আল ইসলামিয়া মাদরাসার পূর্ণাঙ্গ অনলাইন ম্যানেজমেন্ট সিস্টেম ও ওয়েবসাইট - সাধারণ দর্শক পোর্টাল, ছাত্র-অভিভাবক ড্যাশবোর্ড, শিক্ষক ড্যাশবোর্ড ও সুপার অ্যাডমিন কন্ট্রোল প্যানেল।" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@400;500;600;700;800;900&family=Amiri:ital,wght@0,400;0,700;1,400&family=Hind+Siliguri:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased font-['Noto_Serif_Bengali',serif]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

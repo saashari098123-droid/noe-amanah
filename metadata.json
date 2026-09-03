@@ -1,0 +1,8 @@
+{
+  "name": "Remix Darul Amanah Al Islamia Madrasa",
+  "description": "দারুল আমানাহ আল ইসলামিয়া মাদরাসার পূর্ণাঙ্গ অনলাইন ম্যানেজমেন্ট সিস্টেম ও ওয়েবসাইট - সাধারণ দর্শক পোর্টাল, ছাত্র-অভিভাবক ড্যাশবোর্ড, শিক্ষক ড্যাশবোর্ড ও সুপার অ্যাডমিন কন্ট্রোল প্যানেল।",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

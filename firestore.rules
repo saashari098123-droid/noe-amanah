@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read and client operations for this madrasa management system
+    match /madrasa_info/{docId} {
+      allow read, write: if true;
+    }
+
+    match /institutions/{docId} {
+      allow read, write: if true;
+    }
+
+    match /classes/{classId} {
+      allow read, write: if true;
+    }
+
+    match /students/{studentId} {
+      allow read, write: if true;
+    }
+
+    match /teachers/{teacherId} {
+      allow read, write: if true;
+    }
+
+    match /attendances/{attendanceId} {
+      allow read, write: if true;
+    }
+
+    match /homework/{hwId} {
+      allow read, write: if true;
+    }
+
+    match /fee_payments/{paymentId} {
+      allow read, write: if true;
+    }
+
+    match /exam_results/{resultId} {
+      allow read, write: if true;
+    }
+
+    match /notices/{noticeId} {
+      allow read, write: if true;
+    }
+
+    match /media_events/{eventId} {
+      allow read, write: if true;
+    }
+
+    match /complaints/{complaintId} {
+      allow read, write: if true;
+    }
+
+    match /admission_applications/{appId} {
+      allow read, write: if true;
+    }
+
+    match /routines/{routineId} {
+      allow read, write: if true;
+    }
+
+    match /guardian_sms_logs/{smsId} {
+      allow read, write: if true;
+    }
+
+    match /prayer_times/{prayerId} {
+      allow read, write: if true;
+    }
+
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
