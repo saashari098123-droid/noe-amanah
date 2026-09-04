@@ -6,6 +6,7 @@ import { StudentHomework } from './StudentHomework';
 import { StudentFees } from './StudentFees';
 import { StudentResults } from './StudentResults';
 import { StudentFeedback } from './StudentFeedback';
+import { StudentSyllabus } from './StudentSyllabus';
 import {
   GraduationCap,
   Users,
@@ -18,6 +19,7 @@ import {
   LogOut,
   Sparkles,
   Phone,
+  BookMarked,
 } from 'lucide-react';
 
 export const StudentPortal: React.FC = () => {
@@ -43,6 +45,7 @@ export const StudentPortal: React.FC = () => {
     { id: 'overview', label: 'ওভারভিউ', icon: LayoutDashboard },
     { id: 'classmates', label: 'সহপাঠী ও ডিজিটাল হাজিরা', icon: Users },
     { id: 'homework', label: 'ঘণ্টাভিত্তিক হোমওয়ার্ক', icon: BookOpen },
+    { id: 'syllabus', label: 'সিলেবাস ও কিতাব', icon: BookMarked },
     { id: 'fees', label: 'বেতন ও ফি পরিশোধ', icon: CreditCard },
     { id: 'results', label: 'পরীক্ষার রেজাল্ট', icon: Award },
     { id: 'feedback', label: 'অভিভাবকের অভিযোগ/পরামর্শ', icon: MessageSquare },
@@ -132,6 +135,7 @@ export const StudentPortal: React.FC = () => {
         {activeStudentTab === 'overview' && <StudentOverview />}
         {activeStudentTab === 'classmates' && <StudentClassmates />}
         {activeStudentTab === 'homework' && <StudentHomework />}
+        {activeStudentTab === 'syllabus' && <StudentSyllabus />}
         {activeStudentTab === 'fees' && <StudentFees />}
         {activeStudentTab === 'results' && <StudentResults />}
         {activeStudentTab === 'feedback' && <StudentFeedback />}

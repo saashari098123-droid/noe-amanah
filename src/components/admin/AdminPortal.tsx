@@ -11,6 +11,7 @@ import { AdminMedia } from './AdminMedia';
 import { AdminNotices } from './AdminNotices';
 import { AdminComplaints } from './AdminComplaints';
 import { AdminSettings } from './AdminSettings';
+import { AdminSyllabus } from './AdminSyllabus';
 import { AdminExcelGoogleDriveModal } from './AdminExcelGoogleDriveModal';
 import {
   ShieldCheck,
@@ -29,6 +30,7 @@ import {
   Settings,
   Cloud,
   FileSpreadsheet,
+  BookMarked,
 } from 'lucide-react';
 
 export const AdminPortal: React.FC = () => {
@@ -53,6 +55,7 @@ export const AdminPortal: React.FC = () => {
   const tabs = [
     { id: 'overview', label: 'ড্যাশবোর্ড', icon: LayoutDashboard },
     { id: 'classes', label: `জামাত ও কিতাব (${classes.length})`, icon: BookOpen },
+    { id: 'syllabus', label: 'সিলেবাস ও পাঠপরিকল্পনা', icon: BookMarked },
     { id: 'students', label: `ছাত্র ও আইডি (${students.length})`, icon: Users },
     { id: 'teachers', label: 'শিক্ষক ও পাসওয়ার্ড', icon: GraduationCap },
     {
@@ -165,6 +168,7 @@ export const AdminPortal: React.FC = () => {
       <div>
         {activeAdminTab === 'overview' && <AdminOverview />}
         {activeAdminTab === 'classes' && <AdminClasses />}
+        {activeAdminTab === 'syllabus' && <AdminSyllabus />}
         {activeAdminTab === 'students' && <AdminStudents />}
         {activeAdminTab === 'teachers' && <AdminTeachers />}
         {activeAdminTab === 'admissions' && <AdminAdmissions />}

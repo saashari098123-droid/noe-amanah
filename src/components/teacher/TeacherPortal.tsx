@@ -4,6 +4,7 @@ import { TeacherOverview } from './TeacherOverview';
 import { TeacherAttendance } from './TeacherAttendance';
 import { TeacherHomework } from './TeacherHomework';
 import { TeacherComplaints } from './TeacherComplaints';
+import { TeacherSyllabus } from './TeacherSyllabus';
 import {
   Users,
   BookOpen,
@@ -15,6 +16,7 @@ import {
   Phone,
   Mail,
   GraduationCap,
+  BookMarked,
 } from 'lucide-react';
 
 export const TeacherPortal: React.FC = () => {
@@ -55,6 +57,7 @@ export const TeacherPortal: React.FC = () => {
     { id: 'overview', label: 'শিক্ষক ড্যাশবোর্ড', icon: LayoutDashboard },
     { id: 'attendance', label: 'ডিজিটাল ও ম্যানুয়াল হাজিরা', icon: CalendarCheck },
     { id: 'homework', label: 'ঘণ্টাভিত্তিক হোমওয়ার্ক প্রদান', icon: BookOpen },
+    { id: 'syllabus', label: 'সিলেবাস ও পাঠপরিকল্পনা', icon: BookMarked },
     { id: 'complaints', label: `অভিভাবকের বার্তা (${teacherComplaintsCount})`, icon: MessageSquare },
   ];
 
@@ -139,6 +142,7 @@ export const TeacherPortal: React.FC = () => {
         {activeTeacherTab === 'overview' && <TeacherOverview />}
         {activeTeacherTab === 'attendance' && <TeacherAttendance />}
         {activeTeacherTab === 'homework' && <TeacherHomework />}
+        {activeTeacherTab === 'syllabus' && <TeacherSyllabus />}
         {activeTeacherTab === 'complaints' && <TeacherComplaints />}
       </div>
     </div>

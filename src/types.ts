@@ -360,6 +360,39 @@ export type ClassRoutine = ClassRoutineItem;
 export type Homework = DailyHomework;
 export type Complaint = ComplaintMessage;
 
+export interface SyllabusTopic {
+  id: string;
+  topicName: string;
+  pageRangeOrChapters?: string;
+  targetDate?: string;
+  isCompleted?: boolean;
+  note?: string;
+}
+
+export interface SyllabusItem {
+  id: string;
+  classId: string;
+  className: string;
+  subjectName: string;
+  kitabName?: string;
+  term: 'first_term' | 'mid_term' | 'final_term' | 'annual' | string;
+  termLabel: string;
+  academicYear: number;
+  totalMarks?: number;
+  passMarks?: number;
+  topics: SyllabusTopic[];
+  overview?: string;
+  marksDistribution?: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentSize?: string;
+  teacherId?: string;
+  teacherName?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface MonthlyAttendanceStat {
   monthKey: string;
   monthLabel: string;

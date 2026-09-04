@@ -24,6 +24,8 @@ import {
   ClassRoutineItem,
   GuardianSmsLog,
   PeriodDefinition,
+  SyllabusItem,
+  SyllabusTopic,
 } from '../types';
 import { THEME_PRESETS } from '../data/themePresets';
 import {
@@ -41,6 +43,7 @@ import {
   initialComplaints,
   initialRoutines,
   initialGuardianSmsLogs,
+  initialSyllabuses,
 } from '../data/initialData';
 import { getHijriDateString } from '../utils/hijriDate';
 import { getTranslation, translations } from '../utils/translations';
@@ -160,6 +163,7 @@ interface MadrasaContextType {
   admissionApplications: OnlineAdmissionApplication[];
   routines: ClassRoutineItem[];
   guardianSmsLogs: GuardianSmsLog[];
+  syllabuses: SyllabusItem[];
 
   // Operational Actions - Students & Teachers
   addStudent: (student: Omit<Student, 'id'> & { id?: string }) => Student;
@@ -194,6 +198,14 @@ interface MadrasaContextType {
 
   addHomework: (hw: Omit<DailyHomework, 'id' | 'date'> & { date?: string; assignedDate?: string }) => void;
   deleteHomework: (id: string) => void;
+
+  // Operational Actions - Syllabus & Lesson Plans
+  addSyllabus: (syllabus: Omit<SyllabusItem, 'id' | 'createdAt'> & { createdAt?: string }) => SyllabusItem;
+  updateSyllabus: (syllabus: SyllabusItem) => void;
+  deleteSyllabus: (id: string) => void;
+  toggleSyllabusTopicCompleted: (syllabusId: string, topicId: string) => void;
+  resetSyllabusesToDefault: () => void;
+
   publishExamResult: (result: Omit<ExamResult, 'id'> | ExamResult) => ExamResult;
   addExamResult?: (result: Omit<ExamResult, 'id'> | ExamResult) => ExamResult;
   updateExamResult: (result: ExamResult) => void;
@@ -359,6 +371,16 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [admissionApplications, setAdmissionApplications] = useState<OnlineAdmissionApplication[]>(() => loadFromStorage('admissions', []));
   const [routines, setRoutines] = useState<ClassRoutineItem[]>(() => loadFromStorage('routines', initialRoutines));
   const [guardianSmsLogs, setGuardianSmsLogs] = useState<GuardianSmsLog[]>(() => loadFromStorage('guardian_sms_logs', initialGuardianSmsLogs));
+  const [syllabuses, setSyllabuses] = useState<SyllabusItem[]>(() => {
+    const loaded = loadFromStorage<SyllabusItem[]>('syllabuses', initialSyllabuses);
+    const arbiItem = loaded.find((s) => s.id === 'syl-arbi-1');
+    if (arbiItem && (arbiItem.topics.length > 10 || arbiItem.subjectName.includes('২য় খণ্ডের প্রথমাংশ'))) {
+      const updated = loaded.map((s) => (s.id === 'syl-arbi-1' ? initialSyllabuses[0] : s));
+      saveToStorage('syllabuses', updated);
+      return updated;
+    }
+    return loaded;
+  });
 
   // Cloud Sync & Multi-Year Backup (Firebase Firestore)
   const [cloudSyncStatus, setCloudStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
@@ -385,6 +407,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const currentStoredAdmissions = loadFromStorage('admissions', [] as OnlineAdmissionApplication[]);
         const currentStoredRoutines = loadFromStorage('routines', initialRoutines);
         const currentStoredSmsLogs = loadFromStorage('guardian_sms_logs', initialGuardianSmsLogs);
+        const currentStoredSyllabuses = loadFromStorage('syllabuses', initialSyllabuses);
         const currentStoredInfo = loadFromStorage('madrasa_info', initialMadrasaInfo);
         const currentStoredPrayers = loadFromStorage('prayer_times', initialPrayerTimes);
 
@@ -406,6 +429,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
             seedCollection('admission_applications', currentStoredAdmissions),
             seedCollection('routines', currentStoredRoutines),
             seedCollection('guardian_sms_logs', currentStoredSmsLogs),
+            seedCollection('syllabuses', currentStoredSyllabuses),
             saveDocToFirestore('madrasa_info', 'main_info', currentStoredInfo),
             seedCollection(
               'prayer_times',
@@ -463,6 +487,26 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }),
           subscribeToCollection<GuardianSmsLog>('guardian_sms_logs', (data) => {
             if (isMounted && data.length > 0) setGuardianSmsLogs(data);
+          }),
+          subscribeToCollection<SyllabusItem>('syllabuses', (data) => {
+            if (isMounted) {
+              if (data.length > 0) {
+                // If cloud data is missing core initial syllabuses (e.g. Eso Arbi Sikhi), seamlessly merge them
+                const missingInitial = initialSyllabuses.filter(
+                  (init) => !data.some((d) => d.id === init.id)
+                );
+                if (missingInitial.length > 0) {
+                  const merged = [...data, ...missingInitial];
+                  setSyllabuses(merged);
+                  missingInitial.forEach((syl) => saveDocToFirestore('syllabuses', syl.id, syl));
+                } else {
+                  setSyllabuses(data);
+                }
+              } else {
+                setSyllabuses(initialSyllabuses);
+                seedCollection('syllabuses', initialSyllabuses);
+              }
+            }
           }),
           subscribeToCollection<PrayerTimeItem & { id: string }>('prayer_times', (data) => {
             if (isMounted && data.length > 0) setPrayerTimes(data);
@@ -530,6 +574,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => saveToStorage('admissions', admissionApplications), [admissionApplications]);
   useEffect(() => saveToStorage('routines', routines), [routines]);
   useEffect(() => saveToStorage('guardian_sms_logs', guardianSmsLogs), [guardianSmsLogs]);
+  useEffect(() => saveToStorage('syllabuses', syllabuses), [syllabuses]);
 
   const updateInstitution = (updatedInst: InstitutionInfo) => {
     setInstitutions((prev) => prev.map((inst) => (inst.id === updatedInst.id ? updatedInst : inst)));
@@ -627,16 +672,12 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const isPasswordMatched =
       inputPass === teacherPass ||
-      inputPass === 'password123' ||
-      inputPass === '123456' ||
-      inputPass === 'admin' ||
-      inputPass === 'admin123' ||
       inputPass === matched.phone;
 
     if (!isPhoneMatched && !isPasswordMatched) {
       return {
         success: false,
-        message: `ভুল পাসওয়ার্ড বা মোবাইল নম্বর! উস্তাদ ${matched.nameBangla}-এর প্রোফাইলে সংরক্ষিত মোবাইল নম্বর (${matched.phone || 'ফোন নম্বর'}) প্রবেশ করান।`,
+        message: 'ভুল পাসওয়ার্ড বা মোবাইল নম্বর! অনুগ্রহ করে সঠিক পাসওয়ার্ড প্রদান করুন।',
       };
     }
 
@@ -1140,6 +1181,58 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     deleteDocFromFirestore('homework', id);
   };
 
+  // Syllabus & Lesson Plans
+  const addSyllabus = (
+    syllabus: Omit<SyllabusItem, 'id' | 'createdAt'> & { createdAt?: string }
+  ): SyllabusItem => {
+    const today = syllabus.createdAt || new Date().toISOString().split('T')[0];
+    const newSyllabus: SyllabusItem = {
+      ...syllabus,
+      id: `syl-${Date.now()}`,
+      createdAt: today,
+    };
+    setSyllabuses((prev) => [newSyllabus, ...prev]);
+    saveDocToFirestore('syllabuses', newSyllabus.id, newSyllabus);
+    return newSyllabus;
+  };
+
+  const updateSyllabus = (syllabus: SyllabusItem) => {
+    const updatedWithDate = {
+      ...syllabus,
+      updatedAt: new Date().toISOString().split('T')[0],
+    };
+    setSyllabuses((prev) =>
+      prev.map((s) => (s.id === syllabus.id ? updatedWithDate : s))
+    );
+    saveDocToFirestore('syllabuses', updatedWithDate.id, updatedWithDate);
+  };
+
+  const deleteSyllabus = (id: string) => {
+    setSyllabuses((prev) => prev.filter((s) => s.id !== id));
+    deleteDocFromFirestore('syllabuses', id);
+  };
+
+  const toggleSyllabusTopicCompleted = (syllabusId: string, topicId: string) => {
+    setSyllabuses((prev) =>
+      prev.map((s) => {
+        if (s.id === syllabusId) {
+          const updatedTopics = s.topics.map((t) =>
+            t.id === topicId ? { ...t, isCompleted: !t.isCompleted } : t
+          );
+          const updated = { ...s, topics: updatedTopics, updatedAt: new Date().toISOString().split('T')[0] };
+          saveDocToFirestore('syllabuses', updated.id, updated);
+          return updated;
+        }
+        return s;
+      })
+    );
+  };
+
+  const resetSyllabusesToDefault = () => {
+    setSyllabuses(initialSyllabuses);
+    seedCollection('syllabuses', initialSyllabuses);
+  };
+
   // Exam Results with Automatic Merit Position Determination based on Marks
   const publishExamResult = (result: Omit<ExamResult, 'id'>): ExamResult => {
     const newRes: ExamResult = {
@@ -1556,6 +1649,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         admissionApplications,
         routines,
         guardianSmsLogs,
+        syllabuses,
       },
     };
 
@@ -1589,6 +1683,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (db.admissionApplications) setAdmissionApplications(db.admissionApplications);
       if (db.routines) setRoutines(db.routines);
       if (db.guardianSmsLogs) setGuardianSmsLogs(db.guardianSmsLogs);
+      if (db.syllabuses) setSyllabuses(db.syllabuses);
 
       // Trigger Cloud Sync
       setCloudStatus('syncing');
@@ -1621,6 +1716,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setAdmissionApplications([]);
     setRoutines(initialRoutines);
     setGuardianSmsLogs(initialGuardianSmsLogs);
+    setSyllabuses(initialSyllabuses);
     setThemeMode('light');
     setLanguage('bn');
     localStorage.clear();
@@ -1684,6 +1780,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         admissionApplications,
         routines,
         guardianSmsLogs,
+        syllabuses,
 
         addStudent,
         updateStudent,
@@ -1713,6 +1810,11 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
         addHomework,
         deleteHomework,
+        addSyllabus,
+        updateSyllabus,
+        deleteSyllabus,
+        toggleSyllabusTopicCompleted,
+        resetSyllabusesToDefault,
         publishExamResult,
         addExamResult: publishExamResult,
         updateExamResult,
