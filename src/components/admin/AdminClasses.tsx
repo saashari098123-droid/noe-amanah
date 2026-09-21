@@ -18,6 +18,7 @@ import {
   BookMarked,
   Info,
   CheckCircle2,
+  MoreVertical,
 } from 'lucide-react';
 
 export const AdminClasses: React.FC = () => {
@@ -35,6 +36,10 @@ export const AdminClasses: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.id || '');
   const [isAddingClass, setIsAddingClass] = useState(false);
   const [editingClass, setEditingClass] = useState<AcademicClass | null>(null);
+
+  // Dropdown menu state
+  const [openClassMenu, setOpenClassMenu] = useState(false);
+  const [openKitabMenuId, setOpenKitabMenuId] = useState<string | null>(null);
 
   // Delete targets & toast
   const [deleteClassTarget, setDeleteClassTarget] = useState<{ id: string; name: string } | null>(null);
@@ -115,12 +120,51 @@ export const AdminClasses: React.FC = () => {
       return;
     }
 
+    const trimmedName = className.trim();
+    const trimmedCode = classCode.trim();
+
+    if (!editingClass) {
+      const existingWithName = classes.find(
+        (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      if (existingWithName) {
+        alert(`"${trimmedName}" নামের জামাত ইতিমধ্যে বিদ্যমান আছে!`);
+        return;
+      }
+      if (trimmedCode) {
+        const existingWithCode = classes.find(
+          (c) => c.code && c.code.trim().toLowerCase() === trimmedCode.toLowerCase()
+        );
+        if (existingWithCode) {
+          alert(`"${trimmedCode}" কোডটি ইতিমধ্যে অন্য জামাতে ব্যবহৃত হয়েছে!`);
+          return;
+        }
+      }
+    } else {
+      const conflictName = classes.find(
+        (c) => c.id !== editingClass.id && c.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      if (conflictName) {
+        alert(`"${trimmedName}" নামের জামাত ইতিমধ্যে বিদ্যমান আছে!`);
+        return;
+      }
+      if (trimmedCode) {
+        const conflictCode = classes.find(
+          (c) => c.id !== editingClass.id && c.code && c.code.trim().toLowerCase() === trimmedCode.toLowerCase()
+        );
+        if (conflictCode) {
+          alert(`"${trimmedCode}" কোডটি ইতিমধ্যে অন্য জামাতে ব্যবহৃত হয়েছে!`);
+          return;
+        }
+      }
+    }
+
     if (editingClass) {
       updateClass({
         ...editingClass,
-        name: className.trim(),
+        name: trimmedName,
         arabicName: classArabicName.trim(),
-        code: classCode.trim(),
+        code: trimmedCode,
         department,
         departmentLabel,
         monthlyFee: Number(monthlyFeeResidential || monthlyFee),
@@ -134,9 +178,9 @@ export const AdminClasses: React.FC = () => {
       showToast('জামাতের তথ্য ও ফি কাঠামো সফলভাবে আপডেট হয়েছে!');
     } else {
       const created = addClass({
-        name: className.trim(),
+        name: trimmedName,
         arabicName: classArabicName.trim(),
-        code: classCode.trim(),
+        code: trimmedCode,
         department,
         departmentLabel,
         monthlyFee: Number(monthlyFeeResidential || monthlyFee),
@@ -253,14 +297,7 @@ export const AdminClasses: React.FC = () => {
       {/* Header */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-blue-700 font-bold text-xs">
-            <Sparkles className="w-4 h-4" />
-            <span>মাদানী নেসাব ও সকল জামাত ডিরেক্টরি</span>
-          </div>
-          <h2 className="text-xl font-bold text-slate-800">জামাত ও কিতাব/পাঠ্যসূচী ব্যবস্থাপনা</h2>
-          <p className="text-xs text-slate-500">
-            অ্যাডমিন প্যানেল থেকে জামাত তৈরি করুন, ফি নির্ধারণ করুন এবং প্রতি জামাতের কিতাব ও পূর্ণমান সাজান
-          </p>
+          <h2 className="text-xl font-bold text-slate-800">জামাত ও কিতাব ব্যবস্থাপনা</h2>
         </div>
 
         <button
@@ -317,22 +354,46 @@ export const AdminClasses: React.FC = () => {
                   <p className="text-xs font-mono text-slate-400">কোড: {activeClass.code}</p>
                 </div>
 
-                <div className="flex items-center gap-1.5">
+                <div className="relative">
                   <button
-                    onClick={() => handleOpenEditClass(activeClass)}
-                    className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
-                    title="জামাত সম্পাদনা করুন"
+                    onClick={() => setOpenClassMenu(!openClassMenu)}
+                    className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                    title="জামাত অপশন"
                   >
-                    <Edit className="w-4 h-4" />
+                    <MoreVertical className="w-4 h-4" />
                   </button>
-                  {classes.length > 1 && (
-                    <button
-                      onClick={() => handleDeleteClass(activeClass.id, activeClass.name)}
-                      className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                      title="জামাত মুছুন"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                  {openClassMenu && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-20"
+                        onClick={() => setOpenClassMenu(false)}
+                      />
+                      <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-30 space-y-0.5 text-xs">
+                        <button
+                          onClick={() => {
+                            setOpenClassMenu(false);
+                            handleOpenEditClass(activeClass);
+                          }}
+                          className="w-full px-3 py-2 text-left text-slate-700 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 transition"
+                        >
+                          <Edit className="w-3.5 h-3.5 text-blue-600" />
+                          জামাত সম্পাদনা
+                        </button>
+                        {classes.length > 1 && (
+                          <button
+                            onClick={() => {
+                              setOpenClassMenu(false);
+                              handleDeleteClass(activeClass.id, activeClass.name);
+                            }}
+                            className="w-full px-3 py-2 text-left text-rose-600 hover:bg-rose-50 font-semibold flex items-center gap-2 transition border-t border-slate-100"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                            জামাত মুছুন
+                          </button>
+                        )}
+                      </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -442,21 +503,45 @@ export const AdminClasses: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 self-end sm:self-center">
+                      <div className="relative self-end sm:self-center">
                         <button
-                          onClick={() => handleOpenEditKitab(k)}
-                          className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-white rounded-lg transition"
-                          title="কিতাব সম্পাদনা"
+                          onClick={() => setOpenKitabMenuId(openKitabMenuId === k.id ? null : k.id)}
+                          className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-white rounded-lg transition"
+                          title="কিতাব অপশন"
                         >
-                          <Edit className="w-4 h-4" />
+                          <MoreVertical className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteKitab(k.id, k.name)}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-white rounded-lg transition"
-                          title="কিতাব মুছুন"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+
+                        {openKitabMenuId === k.id && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-20"
+                              onClick={() => setOpenKitabMenuId(null)}
+                            />
+                            <div className="absolute right-0 mt-1 w-36 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-30 space-y-0.5 text-xs">
+                              <button
+                                onClick={() => {
+                                  setOpenKitabMenuId(null);
+                                  handleOpenEditKitab(k);
+                                }}
+                                className="w-full px-3 py-1.5 text-left text-slate-700 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 transition"
+                              >
+                                <Edit className="w-3.5 h-3.5 text-blue-600" />
+                                সম্পাদনা
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setOpenKitabMenuId(null);
+                                  handleDeleteKitab(k.id, k.name);
+                                }}
+                                className="w-full px-3 py-1.5 text-left text-rose-600 hover:bg-rose-50 font-semibold flex items-center gap-2 transition border-t border-slate-100"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                                মুছুন
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   ))}

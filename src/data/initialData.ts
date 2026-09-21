@@ -14,6 +14,7 @@ import {
   ClassRoutineItem,
   GuardianSmsLog,
   SyllabusItem,
+  FinancialTransaction,
 } from '../types';
 
 const todayStr = '2026-08-31';
@@ -347,6 +348,7 @@ export const initialTeachers: Teacher[] = [
     qualification: 'দাওরায়ে হাদিস (দারুল উলুম দেওবন্দ), উচ্চতর ইফতা ও উলুমুল হাদিস',
     phone: '01711-223344',
     photoUrl: 'https://images.unsplash.com/photo-1544717305-2782549b5136?w=600&auto=format&fit=crop&q=80',
+    salary: 24000,
     assignedClasses: ['cls-dawrah', 'cls-ifta', 'cls-fazilat'],
     assignedSubjects: ['সহিহুল বুখারি শরিফ (১ম খণ্ড)', 'উসুলুল ইফতা', 'শরহে বেকায়া'],
     joiningDate: '২০০৩-০১-১৫',
@@ -362,6 +364,7 @@ export const initialTeachers: Teacher[] = [
     qualification: 'দাওরায়ে হাদিস (মুমতাজ), আদবুল আরাবিয়া ও মাদানী নেসাব বিশেষজ্ঞ',
     phone: '01819-334455',
     photoUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&auto=format&fit=crop&q=80',
+    salary: 20000,
     assignedClasses: ['cls-madani-1', 'cls-madani-2', 'cls-dawrah'],
     assignedSubjects: ['এসো আরবি শিখি (১ম ও ২য় খণ্ড)', 'সহিহু মুসলিম শরিফ', 'নাহবেমীর'],
     joiningDate: '২০১২-০৩-০১',
@@ -377,6 +380,7 @@ export const initialTeachers: Teacher[] = [
     qualification: 'হাফেজে কুরআন, কিরাআত সাবআ আশারাহ (আন্তর্জাতিক সনদপ্রাপ্ত)',
     phone: '01912-778899',
     photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=600&auto=format&fit=crop&q=80',
+    salary: 18000,
     assignedClasses: ['cls-hifz', 'cls-noorani', 'cls-tajweed'],
     assignedSubjects: ['হিফজুল কুরআন (সবক ও দৌর)', 'তাজবীদ ও মাখরাজ', 'মুকাদ্দিমাতুল জাযারিয়্যাহ'],
     joiningDate: '২০১৫-০৬-০১',
@@ -392,6 +396,7 @@ export const initialTeachers: Teacher[] = [
     qualification: 'বিএসসি (অনার্স), এমএসসি (গণিত), ডিপ্লোমা ইন অ্যারাবিক ল্যাঙ্গুয়েজ',
     phone: '01755-667788',
     photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=600&auto=format&fit=crop&q=80',
+    salary: 17000,
     assignedClasses: ['cls-madani-1', 'cls-hifz', 'cls-noorani'],
     assignedSubjects: ['সাধারণ গণিত ও ইংরেজি', 'বাংলা সাহিত্য', 'কম্পিউটার ও আইসিটি'],
     joiningDate: '২০১৮-০১-১০',
@@ -407,6 +412,7 @@ export const initialTeachers: Teacher[] = [
     qualification: 'দাওরায়ে হাদিস (মুমতাজ), তাখাসসুস ফিল ফিকহিল ইসলামী',
     phone: '01722-334455',
     photoUrl: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=600&auto=format&fit=crop&q=80',
+    salary: 19000,
     assignedClasses: ['cls-sanabiyah', 'cls-mutawassita', 'cls-ifta'],
     assignedSubjects: ['আল-হেদায়া (ফিকহ)', 'জামে তিরমিযী শরিফ', 'উসুলুশ শাশী'],
     joiningDate: '২০১৬-০২-১৫',
@@ -422,10 +428,43 @@ export const initialTeachers: Teacher[] = [
     qualification: 'দাওরায়ে হাদিস, হাফেজে কুরআন',
     phone: '01833-445566',
     photoUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=600&auto=format&fit=crop&q=80',
+    salary: 16000,
     assignedClasses: ['cls-noorani', 'cls-madani-1', 'cls-madani-2'],
     assignedSubjects: ['আত-তামরীনুল কিতাবী', 'নাজেরা কুরআন', 'আল-ক্বিরাআতুর রাশিদাহ'],
     joiningDate: '২০১৯-০৪-১০',
     bio: 'শিক্ষার্থীদের হোস্টেল তত্ত্বাবধান ও তরবিয়াতে সার্বক্ষণিক যত্নশীল।',
+  },
+  {
+    id: 'T-107',
+    email: 'arif@darulamanah.edu.bd',
+    password: 'password123',
+    nameBangla: 'মাওলানা মো. আরিফ বিল্লাহ',
+    nameEnglish: 'Mawlana Md. Arif Billah',
+    designation: 'সহকারী শিক্ষক (নাহু ও আদব)',
+    qualification: 'দাওরায়ে হাদিস, তাকমীলুল আদব',
+    phone: '01719-887766',
+    photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=600&auto=format&fit=crop&q=80',
+    salary: 10000,
+    salaryHistory: [
+      {
+        id: 'sh-arif-1',
+        effectiveFromMonth: 'জিলকদ ১৪৪৭',
+        amount: 9000,
+        note: '১৪৪৭ জিলকদ সেশন শুরু স্কেল',
+        updatedAt: '2026-05-01',
+      },
+      {
+        id: 'sh-arif-2',
+        effectiveFromMonth: 'মুহাররম ১৪৪৮',
+        amount: 10000,
+        note: 'মুহাররম ১৪৪৮ হিজরি নতুন বর্ষ ইনক্রিমেন্ট (+৳১,০০০)',
+        updatedAt: '2026-07-01',
+      },
+    ],
+    assignedClasses: ['cls-madani-1', 'cls-noorani'],
+    assignedSubjects: ['এসো আরবি শিখি', 'এসো নাহু শিখি'],
+    joiningDate: '২০২২-০৫-১৫',
+    bio: 'আরবি ব্যাকরণ ও ভাষা শিক্ষাদানে নিবেদিতপ্রাণ শিক্ষক।',
   },
 ];
 
@@ -1406,63 +1445,7 @@ export const initialHomework: DailyHomework[] = [
   },
 ];
 
-export const initialFeePayments: FeePayment[] = [
-  {
-    id: 'fee-1',
-    studentId: 'DA-2026-101',
-    studentName: 'মুহাম্মদ তৌহিদুল ইসলাম',
-    className: 'ইবতিদায়িয়্যাহ ১ম বর্ষ (মাদানী নেসাব)',
-    roll: 1,
-    feeType: 'monthly_tuition',
-    feeTypeName: 'মাসিক টিউশন ও বোর্ডিং ফি',
-    month: 'আগস্ট ২০২৬',
-    amount: 4000,
-    paymentMethod: 'bkash',
-    transactionId: 'BK7K89320M',
-    senderPhone: '01711-987654',
-    paymentDate: '২০২৬-০৮-০৫',
-    status: 'approved',
-    receiptNo: 'REC-2026-08101',
-    approvedBy: 'সুপার অ্যাডমিন',
-    approvalDate: '২০২৬-০৮-০৬',
-  },
-  {
-    id: 'fee-2',
-    studentId: 'DA-2026-102',
-    studentName: 'মুহাম্মদ আব্দুল্লাহ আল নাফিস',
-    className: 'ইবতিদায়িয়্যাহ ১ম বর্ষ (মাদানী নেসাব)',
-    roll: 2,
-    feeType: 'monthly_tuition',
-    feeTypeName: 'মাসিক টিউশন ফি',
-    month: 'আগস্ট ২০২৬',
-    amount: 4000,
-    paymentMethod: 'nagad',
-    transactionId: 'NG9X34812L',
-    senderPhone: '01819-112233',
-    paymentDate: '২০২৬-০৮-১০',
-    status: 'pending',
-    receiptNo: 'REC-2026-08102',
-  },
-  {
-    id: 'fee-3',
-    studentId: 'DA-2026-201',
-    studentName: 'মুহাম্মদ আনাস মাহমুদ',
-    className: 'আন্তর্জাতিক হিফজুল কুরআন বিভাগ (তাহফীজ)',
-    roll: 1,
-    feeType: 'monthly_tuition',
-    feeTypeName: 'হিফজ বিভাগ বোর্ডিং ফি',
-    month: 'আগস্ট ২০২৬',
-    amount: 3500,
-    paymentMethod: 'bkash',
-    transactionId: 'BK8M99214P',
-    senderPhone: '01733-889900',
-    paymentDate: '২০২৬-০৮-০৮',
-    status: 'approved',
-    receiptNo: 'REC-2026-08201',
-    approvedBy: 'সুপার অ্যাডমিন',
-    approvalDate: '২০২৬-০৮-০৯',
-  },
-];
+export const initialFeePayments: FeePayment[] = [];
 
 export const initialExamResults: ExamResult[] = [
   {
@@ -2195,4 +2178,8 @@ export const initialSyllabuses: SyllabusItem[] = [
     ],
   },
 ];
+
+export const initialFinancialTransactions: FinancialTransaction[] = [];
+
+
 

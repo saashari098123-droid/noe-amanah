@@ -24,6 +24,7 @@ import {
   Layers,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 interface ClassResultTabulationSheetProps {
   isOpen: boolean;
@@ -71,6 +72,7 @@ export const ClassResultTabulationSheet: React.FC<ClassResultTabulationSheetProp
   // Manual Inline Merit Position Adjustment Mode
   const [isManualEditMode, setIsManualEditMode] = useState(false);
   const [manualRanks, setManualRanks] = useState<Record<string, number>>({});
+  const [isResetAutoConfirmOpen, setIsResetAutoConfirmOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -169,17 +171,20 @@ export const ClassResultTabulationSheet: React.FC<ClassResultTabulationSheetProp
 
   // Reset to automated scoring
   const handleResetToAuto = () => {
-    if (window.confirm('আপনি কি এই জামাতের সকল শিক্ষার্থীর মেধাস্থান পুনরায় স্বয়ংক্রিয় নম্বর অনুযায়ী রিসেট করতে চান?')) {
-      classResults.forEach((r) => {
-        updateExamResult({
-          ...r,
-          isManualPosition: false,
-        });
+    setIsResetAutoConfirmOpen(true);
+  };
+
+  const handleConfirmResetAuto = () => {
+    classResults.forEach((r) => {
+      updateExamResult({
+        ...r,
+        isManualPosition: false,
       });
-      recalculateAllMeritPositions();
-      setIsManualEditMode(false);
-      showToast('সকল শিক্ষার্থীর মেধাস্থান নম্বরের ভিত্তিতে অটোমেটিক নির্ধারণ করা হয়েছে!');
-    }
+    });
+    recalculateAllMeritPositions();
+    setIsManualEditMode(false);
+    showToast('সকল শিক্ষার্থীর মেধাস্থান নম্বরের ভিত্তিতে অটোমেটিক নির্ধারণ করা হয়েছে!');
+    setIsResetAutoConfirmOpen(false);
   };
 
   const handlePrint = () => {
@@ -796,6 +801,18 @@ export const ClassResultTabulationSheet: React.FC<ClassResultTabulationSheetProp
           </div>
         </div>
       </div>
+
+      {/* Reset Merit Position Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isResetAutoConfirmOpen}
+        title="মেধাস্থান অটোমেটিক রিসেট নিশ্চিতকরণ"
+        itemName={`${currentClass?.name || 'জামাত'} - ${currentExamTitle}`}
+        description="আপনি কি এই জামাতের সকল শিক্ষার্থীর মেধাস্থান পুনরায় স্বয়ংক্রিয়ভাবে প্রাপ্ত মোট নম্বরের ভিত্তিতে নির্ধারণ করতে চান? এতে পূর্বের কাস্টম ক্রম রিসেট হবে।"
+        confirmText="হ্যাঁ, অটো রিসেট করুন"
+        cancelText="বাতিল"
+        onConfirm={handleConfirmResetAuto}
+        onClose={() => setIsResetAutoConfirmOpen(false)}
+      />
 
       {/* Floating Toast */}
       {toastMessage && (

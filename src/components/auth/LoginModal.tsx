@@ -177,7 +177,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                     required
                     value={studentPassword}
                     onChange={(e) => setStudentPassword(e.target.value)}
-                    placeholder="পাসওয়ার্ড লিখুন"
+                    placeholder="পাসওয়ার্ড লিখুন (ডিফল্ট: student123)"
                     className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
                   <button
@@ -246,10 +246,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                 </div>
               </div>
 
-              {/* Teacher Password / Mobile */}
+              {/* Teacher Password */}
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  পাসওয়ার্ড (Password / মোবাইল নম্বর) *
+                  শিক্ষক পাসওয়ার্ড (Teacher Password) *
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
@@ -259,7 +259,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                     required
                     value={teacherPassword}
                     onChange={(e) => setTeacherPassword(e.target.value)}
-                    placeholder="পাসওয়ার্ড বা মোবাইল নম্বর দিন"
+                    placeholder="উস্তাদের গোপন পাসওয়ার্ড লিখুন (ডিফল্ট: teacher123)"
                     className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-amber-500"
                   />
                   <button
@@ -300,7 +300,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, default
                     required
                     value={adminPassword}
                     onChange={(e) => setAdminPassword(e.target.value)}
-                    placeholder="অ্যাডমিন পাসওয়ার্ড লিখুন"
+                    placeholder="অ্যাডমিন পাসওয়ার্ড লিখুন (ডিফল্ট: admin)"
                     className="w-full pl-9 pr-10 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-purple-500"
                   />
                   <button

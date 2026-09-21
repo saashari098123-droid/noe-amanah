@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useMadrasa } from '../context/MadrasaContext';
 import { CloudSyncModal } from './common/CloudSyncModal';
 import {
@@ -20,6 +21,7 @@ import {
   Clock,
   Cloud,
   RefreshCw,
+  MoreVertical,
 } from 'lucide-react';
 import { getHijriDateString, formatDualDate } from '../utils/hijriDate';
 import { Language } from '../types';
@@ -34,10 +36,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
     activePublicTab,
     setActivePublicTab,
     currentRole,
-    quickSwitchRole,
     logout,
     activeAdminTab,
     setActiveAdminTab,
+    setActiveTeacherTab,
+    setActiveStudentTab,
     language,
     setLanguage,
     themeMode,
@@ -49,6 +52,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isCloudSyncModalOpen, setIsCloudSyncModalOpen] = useState(false);
+  const [isTopToolsOpen, setIsTopToolsOpen] = useState(false);
 
   const todayGregorian = new Date().toLocaleDateString('bn-BD', {
     day: 'numeric',
@@ -73,89 +77,166 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
       {/* 0. Top Scrolling Announcement & Date Bar (Scrolls away with page to save screen space) */}
       <div className="bg-emerald-950 text-emerald-100 text-xs py-2 px-4 border-b border-emerald-900/60 transition">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          {/* Dual Date Display (Hijri + Gregorian) + Cloud Status */}
+          {/* Dual Date Display (Hijri + Gregorian) */}
           <div className="flex items-center gap-2.5 text-[11px] sm:text-xs">
             <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span className="font-medium text-amber-300">{todayHijri}</span>
             <span className="text-emerald-400">|</span>
             <span className="text-emerald-200">{todayGregorian}</span>
-
-            {/* Interactive Cloud Sync Status Badge */}
-            <button
-              onClick={() => setIsCloudSyncModalOpen(true)}
-              title="ক্লাউড ডাটাবেস স্ট্যাটাস ও সিঙ্ক কন্ট্রোল খুলুন"
-              className="inline-flex items-center gap-1.5 bg-emerald-900/90 hover:bg-emerald-800 text-emerald-300 hover:text-white px-2.5 py-0.5 rounded-lg text-[10px] sm:text-[11px] border border-emerald-700/80 transition cursor-pointer shadow-xs active:scale-95"
-            >
-              <Cloud className="w-3.5 h-3.5 text-emerald-400" />
-              <span>
-                {cloudSyncStatus === 'synced'
-                  ? 'ক্লাউড সিঙ্কড (ক্লিক করুন)'
-                  : cloudSyncStatus === 'syncing'
-                  ? 'সিঙ্ক হচ্ছে...'
-                  : 'ক্লাউড সক্রিয় (ক্লিক করুন)'}
-              </span>
-            </button>
           </div>
 
-          {/* Quick Language & Theme Mode Controls */}
-          <div className="flex items-center gap-3">
-            {/* Language Selector */}
-            <div className="flex items-center gap-1 bg-emerald-900/80 px-2 py-0.5 rounded-lg border border-emerald-800 text-[11px]">
-              <Globe className="w-3.5 h-3.5 text-amber-400" />
-              <button
-                onClick={() => setLanguage('bn')}
-                className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                  language === 'bn' ? 'bg-amber-400 text-slate-950 font-bold' : 'hover:text-amber-200 text-emerald-200'
-                }`}
-              >
-                বাংলা
-              </button>
-              <button
-                onClick={() => setLanguage('en')}
-                className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                  language === 'en' ? 'bg-amber-400 text-slate-950 font-bold' : 'hover:text-amber-200 text-emerald-200'
-                }`}
-              >
-                EN
-              </button>
-              <button
-                onClick={() => setLanguage('ar')}
-                className={`px-1.5 py-0.5 rounded cursor-pointer ${
-                  language === 'ar' ? 'bg-amber-400 text-slate-950 font-bold font-["Amiri"]' : 'hover:text-amber-200 text-emerald-200 font-["Amiri"]'
-                }`}
-              >
-                العربية
-              </button>
-            </div>
-
-            {/* Dark & White (Light) Mode Toggle Button */}
+          {/* Three-Dot Menu for Utility Buttons (Cloud, Language, Theme, Complaints) */}
+          <div className="relative">
             <button
-              id="theme-mode-toggle-btn"
-              onClick={toggleThemeMode}
-              className="flex items-center gap-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-amber-300 font-semibold px-2.5 py-1 rounded-lg border border-emerald-800 text-[11px] cursor-pointer transition shadow-xs"
-              title={themeMode === 'light' ? 'ডার্ক মোড সক্রিয় করুন' : 'লাইট মোড সক্রিয় করুন'}
+              id="header-top-tools-btn"
+              onClick={() => setIsTopToolsOpen((prev) => !prev)}
+              className="flex items-center gap-1.5 bg-emerald-900/90 hover:bg-emerald-800 text-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-700/80 text-[11px] font-medium transition cursor-pointer shadow-xs active:scale-95"
+              title="মেনু, ভাষা ও সেটিংস"
             >
-              {themeMode === 'light' ? (
+              <span className={`w-2 h-2 rounded-full ${cloudSyncStatus === 'synced' ? 'bg-emerald-400' : 'bg-amber-400'} animate-pulse`} />
+              <span className="hidden sm:inline">টুলস ও সেটিংস</span>
+              <MoreVertical className="w-3.5 h-3.5 text-amber-300" />
+            </button>
+
+            {/* Dropdown Menu with Animation */}
+            <AnimatePresence>
+              {isTopToolsOpen && (
                 <>
-                  <Moon className="w-3.5 h-3.5 text-amber-300" />
-                  <span>ডার্ক মোড</span>
-                </>
-              ) : (
-                <>
-                  <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span>লাইট মোড</span>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsTopToolsOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute right-0 mt-1.5 w-64 bg-slate-900 text-slate-100 border border-slate-700 rounded-xl shadow-2xl p-3 z-50 space-y-2.5 text-xs"
+                  >
+                    {/* 1. Cloud Sync Status & Action */}
+                    <div className="pb-2 border-b border-slate-800">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-semibold">
+                        ক্লাউড ডাটাবেস
+                      </div>
+                      <button
+                        onClick={() => {
+                          setIsCloudSyncModalOpen(true);
+                          setIsTopToolsOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition text-left cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Cloud className={`w-4 h-4 ${
+                            cloudSyncStatus === 'synced' ? 'text-emerald-400' :
+                            cloudSyncStatus === 'syncing' ? 'text-amber-400 animate-spin' :
+                            cloudSyncStatus === 'error' ? 'text-rose-400' : 'text-slate-400'
+                          }`} />
+                          <span className="font-medium text-slate-200">
+                            {cloudSyncStatus === 'synced'
+                              ? 'ক্লাউড সিঙ্কড'
+                              : cloudSyncStatus === 'syncing'
+                              ? 'সিঙ্ক হচ্ছে...'
+                              : cloudSyncStatus === 'error'
+                              ? 'সিঙ্ক ত্রুটি'
+                              : 'অফলাইন মোড'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30 font-mono">
+                          ক্লিক করুন
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* 2. Language Selector */}
+                    <div className="pb-2 border-b border-slate-800">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-semibold">
+                        ভাষা নির্বাচন (Language)
+                      </div>
+                      <div className="grid grid-cols-3 gap-1 bg-slate-800/80 p-1 rounded-lg border border-slate-700">
+                        <button
+                          onClick={() => {
+                            setLanguage('bn');
+                            setIsTopToolsOpen(false);
+                          }}
+                          className={`py-1 rounded text-center font-medium transition cursor-pointer ${
+                            language === 'bn' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          বাংলা
+                        </button>
+                        <button
+                          onClick={() => {
+                            setLanguage('en');
+                            setIsTopToolsOpen(false);
+                          }}
+                          className={`py-1 rounded text-center font-medium transition cursor-pointer ${
+                            language === 'en' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          English
+                        </button>
+                        <button
+                          onClick={() => {
+                            setLanguage('ar');
+                            setIsTopToolsOpen(false);
+                          }}
+                          className={`py-1 rounded text-center font-medium font-["Amiri"] transition cursor-pointer ${
+                            language === 'ar' ? 'bg-amber-400 text-slate-950 font-bold' : 'text-slate-300 hover:bg-slate-700'
+                          }`}
+                        >
+                          العربية
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 3. Theme Mode Toggle */}
+                    <div className="pb-2 border-b border-slate-800">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1 font-semibold">
+                        ডিসপ্লে থিম
+                      </div>
+                      <button
+                        onClick={() => {
+                          toggleThemeMode();
+                          setIsTopToolsOpen(false);
+                        }}
+                        className="w-full flex items-center justify-between p-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2 text-slate-200">
+                          {themeMode === 'light' ? (
+                            <>
+                              <Sun className="w-4 h-4 text-amber-400" />
+                              <span>লাইট মোড সক্রিয়</span>
+                            </>
+                          ) : (
+                            <>
+                              <Moon className="w-4 h-4 text-amber-300" />
+                              <span>ডার্ক মোড সক্রিয়</span>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-[10px] bg-slate-700 text-amber-300 px-2 py-0.5 rounded font-medium">
+                          টগল করুন
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* 4. Complaints & Suggestions Box */}
+                    <div>
+                      <button
+                        onClick={() => {
+                          setIsComplaintsModalOpen(true);
+                          setIsTopToolsOpen(false);
+                        }}
+                        className="w-full flex items-center justify-center gap-2 p-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition shadow-xs cursor-pointer"
+                      >
+                        <MessageSquarePlus className="w-4 h-4 text-slate-950" />
+                        <span>অভিযোগ ও পরামর্শ বক্স</span>
+                      </button>
+                    </div>
+                  </motion.div>
                 </>
               )}
-            </button>
-
-            {/* Complaints Box Button (Header Fast Trigger) */}
-            <button
-              onClick={() => setIsComplaintsModalOpen(true)}
-              className="hidden md:flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded-lg text-[11px] cursor-pointer transition shadow-xs"
-            >
-              <MessageSquarePlus className="w-3.5 h-3.5 text-slate-950" />
-              <span>অভিযোগ ও পরামর্শ বক্স</span>
-            </button>
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -209,7 +290,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
                 <button
                   id="header-admin-settings-btn"
                   onClick={() => {
-                    quickSwitchRole('admin');
                     setActiveAdminTab('settings');
                   }}
                   className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer ${
@@ -226,7 +306,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
                 <button
                   id="header-admin-portal-btn"
                   onClick={() => {
-                    quickSwitchRole('admin');
                     setActiveAdminTab('dashboard');
                   }}
                   className="bg-white/10 hover:bg-white/20 text-white font-semibold px-3.5 py-2 rounded-xl text-xs sm:text-sm border border-white/20 flex items-center gap-1.5 transition cursor-pointer"
@@ -247,7 +326,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
             ) : currentRole === 'teacher' ? (
               <>
                 <button
-                  onClick={() => quickSwitchRole('teacher')}
+                  onClick={() => setActiveTeacherTab('attendance')}
                   className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <GraduationCap className="w-4 h-4" />
@@ -264,7 +343,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
             ) : currentRole === 'student' ? (
               <>
                 <button
-                  onClick={() => quickSwitchRole('student')}
+                  onClick={() => setActiveStudentTab('overview')}
                   className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer"
                 >
                   <UserCheck className="w-4 h-4 text-amber-300" />
@@ -367,61 +446,69 @@ export const Header: React.FC<HeaderProps> = ({ onOpenLogin }) => {
       )}
 
       {/* 3. Three-Bar Mobile Drawer Menu (Includes Complaints Box) */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden bg-slate-900 text-white border-b border-slate-800 p-4 space-y-2.5 animate-fadeIn">
-          {/* Quick Date Display in 3-Bar Menu */}
-          <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between text-xs text-slate-300">
-            <span className="text-amber-400 font-medium">{todayHijri}</span>
-            <span>{todayGregorian}</span>
-          </div>
-
-          {/* Explicit Complaints & Suggestions Box in 3-Bar Menu */}
-          <button
-            onClick={() => {
-              setIsComplaintsModalOpen(true);
-              setMobileMenuOpen(false);
-            }}
-            className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-2.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: 'easeInOut' }}
+            className="lg:hidden overflow-hidden bg-slate-900 text-white border-b border-slate-800 p-4 space-y-2.5"
           >
-            <MessageSquarePlus className="w-5 h-5 text-slate-950" />
-            <span>অভিযোগ ও পরামর্শের বক্স (ওপেন করুন)</span>
-          </button>
+            {/* Quick Date Display in 3-Bar Menu */}
+            <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between text-xs text-slate-300">
+              <span className="text-amber-400 font-medium">{todayHijri}</span>
+              <span>{todayGregorian}</span>
+            </div>
 
-          {/* Navigation Items */}
-          <div className="space-y-1 pt-1">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => {
-                  setActivePublicTab(item.id);
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-between ${
-                  activePublicTab === item.id
-                    ? 'bg-emerald-800 text-amber-300 font-bold'
-                    : 'hover:bg-slate-800 text-slate-200'
-                }`}
-              >
-                <span>{language === 'ar' ? item.labelAr : language === 'en' ? item.labelEn : item.labelBn}</span>
-                {activePublicTab === item.id && <span className="text-amber-400">●</span>}
-              </button>
-            ))}
-          </div>
-
-          {/* Online Admission Quick CTA */}
-          <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
+            {/* Explicit Complaints & Suggestions Box in 3-Bar Menu */}
             <button
               onClick={() => {
-                setActivePublicTab('admission');
+                setIsComplaintsModalOpen(true);
                 setMobileMenuOpen(false);
               }}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-sm text-center shadow-xs cursor-pointer"
+              className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold py-2.5 px-4 rounded-xl text-sm flex items-center justify-center gap-2 shadow-md transition cursor-pointer"
             >
-              অনলাইন ভর্তি আবেদন ফরম
+              <MessageSquarePlus className="w-5 h-5 text-slate-950" />
+              <span>অভিযোগ ও পরামর্শের বক্স (ওপেন করুন)</span>
             </button>
-          </div>
-        </div>
-      )}
+
+            {/* Navigation Items */}
+            <div className="space-y-1 pt-1">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActivePublicTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition flex items-center justify-between ${
+                    activePublicTab === item.id
+                      ? 'bg-emerald-800 text-amber-300 font-bold'
+                      : 'hover:bg-slate-800 text-slate-200'
+                  }`}
+                >
+                  <span>{language === 'ar' ? item.labelAr : language === 'en' ? item.labelEn : item.labelBn}</span>
+                  {activePublicTab === item.id && <span className="text-amber-400">●</span>}
+                </button>
+              ))}
+            </div>
+
+            {/* Online Admission Quick CTA */}
+            <div className="pt-2 border-t border-slate-800 flex flex-col gap-2">
+              <button
+                onClick={() => {
+                  setActivePublicTab('admission');
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-sm text-center shadow-xs cursor-pointer"
+              >
+                অনলাইন ভর্তি আবেদন ফরম
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cloud Sync Status & Backup Modal */}
       <CloudSyncModal

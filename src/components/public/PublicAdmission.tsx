@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { OnlineAdmissionApplication } from '../../types';
+import { printHtmlElement } from '../../utils/printHelper';
 import {
   GraduationCap,
   Sparkles,
@@ -14,6 +15,10 @@ import {
   Search,
   BookOpen,
   Info,
+  AlertCircle,
+  Loader2,
+  Check,
+  FileText,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -43,6 +48,11 @@ export const PublicAdmission: React.FC = () => {
   const [transactionId, setTransactionId] = useState('');
   const [senderNumber, setSenderNumber] = useState('');
 
+  // Validation & UI State
+  const [formError, setFormError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Submission token output
   const [submittedApplication, setSubmittedApplication] = useState<OnlineAdmissionApplication | null>(null);
 
@@ -64,37 +74,113 @@ export const PublicAdmission: React.FC = () => {
       : selectedClass.monthlyFeeResidential || selectedClass.monthlyFee || 4500
     : 4500;
 
+  const normalizePhoneNumber = (input: string): string => {
+    const bnToEn: Record<string, string> = {
+      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+    };
+    let cleaned = input.replace(/[০-৯]/g, (d) => bnToEn[d] || d);
+    cleaned = cleaned.replace(/[\s\-\+\(\)]/g, '');
+    if (cleaned.startsWith('880')) {
+      cleaned = cleaned.substring(2);
+    } else if (cleaned.startsWith('+880')) {
+      cleaned = cleaned.substring(3);
+    }
+    return cleaned;
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cls = classes.find((c) => c.id === currentClassId);
+    setFormError(null);
+    const errors: Record<string, string> = {};
 
-    const newApp = submitAdmissionApplication({
-      applicantNameBangla,
-      applicantNameEnglish,
-      fatherName,
-      motherName,
-      guardianPhone,
-      dateOfBirth,
-      gender,
-      bloodGroup,
-      institutionId: 'madrasa_main',
-      institutionName: madrasaInfo.nameBangla,
-      applyingClassId: currentClassId,
-      applyingClassName: cls ? cls.name : 'সাধারণ শ্রেণি',
-      residentialPreference,
-      applicableMonthlyFee,
-      admissionFee,
-      previousMadrasaOrSchool: previousSchool,
-      presentAddress,
-      permanentAddress,
-      paymentMethod,
-      transactionId: transactionId || undefined,
-      paymentStatus: paymentMethod === 'office' ? 'unpaid' : 'paid',
-      amountPaid: admissionFee,
-    });
+    // 1. Name validation
+    if (!applicantNameBangla.trim()) {
+      errors.applicantNameBangla = 'শিক্ষার্থীর নাম বাংলায় লিখুন';
+    }
 
-    setSubmittedApplication(newApp);
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+    // 2. Phone validation
+    const normalizedPhone = normalizePhoneNumber(guardianPhone);
+    const phoneRegex = /^01[3-9]\d{8}$/;
+    if (!normalizedPhone) {
+      errors.guardianPhone = 'অভিভাবকের মোবাইল নম্বর লিখুন';
+    } else if (!phoneRegex.test(normalizedPhone)) {
+      errors.guardianPhone = 'সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন (যেমন: 017XXXXXXXX)';
+    }
+
+    // 3. Father & Mother validation
+    if (!fatherName.trim()) {
+      errors.fatherName = 'পিতার নাম লিখুন';
+    }
+    if (!motherName.trim()) {
+      errors.motherName = 'মাতার নাম লিখুন';
+    }
+
+    // 4. Address validation
+    if (!presentAddress.trim()) {
+      errors.presentAddress = 'বর্তমান ঠিকানা লিখুন';
+    }
+
+    // If there are errors, show them and scroll
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setFormError('অনুগ্রহ করে লাল চিহ্নিত প্রয়োজনীয় তথ্যগুলো পূরণ করুন।');
+      const errEl = document.getElementById('admission-form-error-banner');
+      if (errEl) {
+        errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      return;
+    }
+
+    setFieldErrors({});
+    setIsSubmitting(true);
+
+    try {
+      const cls = classes.find((c) => c.id === currentClassId);
+      const normalizedSender = senderNumber.trim() ? normalizePhoneNumber(senderNumber) : undefined;
+      const hasPaidOnline = paymentMethod !== 'office' && transactionId.trim().length > 0;
+      const actualPaymentMethod = hasPaidOnline ? paymentMethod : (paymentMethod === 'office' ? 'office' : 'office');
+
+      const newApp = submitAdmissionApplication({
+        applicantNameBangla: applicantNameBangla.trim(),
+        applicantNameEnglish: (applicantNameEnglish || applicantNameBangla).trim().toUpperCase(),
+        fatherName: fatherName.trim(),
+        motherName: motherName.trim(),
+        guardianPhone: normalizedPhone,
+        dateOfBirth: dateOfBirth || '2018-01-01',
+        gender,
+        bloodGroup,
+        institutionId: 'madrasa_main',
+        institutionName: madrasaInfo.nameBangla,
+        applyingClassId: currentClassId,
+        applyingClassName: cls ? cls.name : 'সাধারণ শ্রেণি',
+        residentialPreference,
+        applicableMonthlyFee,
+        admissionFee,
+        previousMadrasaOrSchool: previousSchool.trim(),
+        presentAddress: presentAddress.trim(),
+        permanentAddress: (permanentAddress || presentAddress).trim(),
+        paymentMethod: actualPaymentMethod,
+        transactionId: transactionId.trim() || undefined,
+        senderNumber: normalizedSender,
+        paymentStatus: hasPaidOnline ? 'paid' : 'unpaid',
+        amountPaid: hasPaidOnline ? admissionFee : 0,
+      });
+
+      setSubmittedApplication(newApp);
+      setIsSubmitting(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      try {
+        confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+      } catch {
+        // Ignored
+      }
+    } catch (err: any) {
+      console.error('Submission error:', err);
+      setIsSubmitting(false);
+      setFormError('আবেদন প্রক্রিয়াকরণে সমস্যা হয়েছে, দয়া করে পুনরায় চেষ্টা করুন।');
+    }
   };
 
   const handleSearchApplication = (e: React.FormEvent) => {
@@ -111,7 +197,7 @@ export const PublicAdmission: React.FC = () => {
   };
 
   const handlePrintSlip = () => {
-    window.print();
+    printHtmlElement('public-admission-print-slip', { title: 'ভর্তি আবেদন ও ফি রসিদ - দারুল আমানাহ' });
   };
 
   return (
@@ -182,7 +268,7 @@ export const PublicAdmission: React.FC = () => {
               </div>
 
               {/* Official Slip Card */}
-              <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 bg-slate-50 relative space-y-6">
+              <div id="public-admission-print-slip" className="border-2 border-dashed border-slate-300 rounded-2xl p-6 bg-slate-50 relative space-y-6">
                 <div className="text-center border-b border-slate-200 pb-4">
                   <div className="font-['Amiri'] text-blue-800 text-sm">{madrasaInfo.nameArabic}</div>
                   <h2 className="text-xl font-bold text-slate-900">{madrasaInfo.nameBangla}</h2>
@@ -288,7 +374,18 @@ export const PublicAdmission: React.FC = () => {
             </div>
           ) : (
             /* Admission Application Form */
-            <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-slate-200 space-y-8">
+            <form onSubmit={handleSubmit} noValidate className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-slate-200 space-y-8">
+              {/* Form Global Error Banner */}
+              {formError && (
+                <div id="admission-form-error-banner" className="bg-rose-50 border-2 border-rose-300 text-rose-900 p-4 rounded-2xl flex items-start gap-3 animate-in fade-in">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-xs sm:text-sm">
+                    <strong className="block font-bold mb-0.5">আবেদন দাখিলে ত্রুটি:</strong>
+                    <span>{formError}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Step 1: Academic Choice & Class Selection */}
               <div>
                 <h3 className="text-base font-bold text-slate-900 mb-4 pb-2 border-b border-slate-100 flex items-center gap-2">
@@ -403,21 +500,33 @@ export const PublicAdmission: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      required
                       value={applicantNameBangla}
-                      onChange={(e) => setApplicantNameBangla(e.target.value)}
+                      onChange={(e) => {
+                        setApplicantNameBangla(e.target.value);
+                        if (fieldErrors.applicantNameBangla) {
+                          setFieldErrors((prev) => ({ ...prev, applicantNameBangla: '' }));
+                        }
+                      }}
                       placeholder="উদাঃ মুহাম্মদ আব্দুল্লাহ আল মাহিন"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 ${
+                        fieldErrors.applicantNameBangla
+                          ? 'border-rose-500 ring-2 ring-rose-200'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     />
+                    {fieldErrors.applicantNameBangla && (
+                      <span className="text-[11px] text-rose-600 font-semibold mt-1 block">
+                        {fieldErrors.applicantNameBangla}
+                      </span>
+                    )}
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Applicant's Name (In English, Capital) *
+                      Applicant's Name (In English, Capital)
                     </label>
                     <input
                       type="text"
-                      required
                       value={applicantNameEnglish}
                       onChange={(e) => setApplicantNameEnglish(e.target.value)}
                       placeholder="MUHAMMAD ABDULLAH AL MAHIN"
@@ -426,10 +535,9 @@ export const PublicAdmission: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">জন্ম তারিখ *</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">জন্ম তারিখ</label>
                     <input
                       type="date"
-                      required
                       value={dateOfBirth}
                       onChange={(e) => setDateOfBirth(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
@@ -467,60 +575,112 @@ export const PublicAdmission: React.FC = () => {
                     <label className="block text-xs font-semibold text-slate-700 mb-1">পিতার নাম *</label>
                     <input
                       type="text"
-                      required
                       value={fatherName}
-                      onChange={(e) => setFatherName(e.target.value)}
+                      onChange={(e) => {
+                        setFatherName(e.target.value);
+                        if (fieldErrors.fatherName) {
+                          setFieldErrors((prev) => ({ ...prev, fatherName: '' }));
+                        }
+                      }}
                       placeholder="পিতার পূর্ণ নাম"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 ${
+                        fieldErrors.fatherName
+                          ? 'border-rose-500 ring-2 ring-rose-200'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     />
+                    {fieldErrors.fatherName && (
+                      <span className="text-[11px] text-rose-600 font-semibold mt-1 block">
+                        {fieldErrors.fatherName}
+                      </span>
+                    )}
                   </div>
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">মাতার নাম *</label>
                     <input
                       type="text"
-                      required
                       value={motherName}
-                      onChange={(e) => setMotherName(e.target.value)}
+                      onChange={(e) => {
+                        setMotherName(e.target.value);
+                        if (fieldErrors.motherName) {
+                          setFieldErrors((prev) => ({ ...prev, motherName: '' }));
+                        }
+                      }}
                       placeholder="মাতার পূর্ণ নাম"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 ${
+                        fieldErrors.motherName
+                          ? 'border-rose-500 ring-2 ring-rose-200'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     />
+                    {fieldErrors.motherName && (
+                      <span className="text-[11px] text-rose-600 font-semibold mt-1 block">
+                        {fieldErrors.motherName}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      অভিভাবকের মোবাইল নম্বর (SMS প্রাপ্তির জন্য) *
+                      অভিভাবকের মোবাইল নম্বর (SMS ও যোগাযোগের জন্য) *
                     </label>
                     <input
                       type="tel"
-                      required
                       value={guardianPhone}
-                      onChange={(e) => setGuardianPhone(e.target.value)}
+                      onChange={(e) => {
+                        setGuardianPhone(e.target.value);
+                        if (fieldErrors.guardianPhone) {
+                          setFieldErrors((prev) => ({ ...prev, guardianPhone: '' }));
+                        }
+                      }}
                       placeholder="017XXXXXXXX"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm font-mono focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm font-mono focus:bg-white focus:outline-hidden focus:ring-2 ${
+                        fieldErrors.guardianPhone
+                          ? 'border-rose-500 ring-2 ring-rose-200'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     />
+                    {fieldErrors.guardianPhone && (
+                      <span className="text-[11px] text-rose-600 font-semibold mt-1 block">
+                        {fieldErrors.guardianPhone}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-700 mb-1">বর্তমান ঠিকানা *</label>
                     <textarea
-                      required
                       rows={2}
                       value={presentAddress}
-                      onChange={(e) => setPresentAddress(e.target.value)}
+                      onChange={(e) => {
+                        setPresentAddress(e.target.value);
+                        if (fieldErrors.presentAddress) {
+                          setFieldErrors((prev) => ({ ...prev, presentAddress: '' }));
+                        }
+                      }}
                       placeholder="বাসা/রোড, গ্রাম, ডাকঘর, থানা, জেলা..."
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      className={`w-full px-3.5 py-2.5 bg-slate-50 border rounded-xl text-xs sm:text-sm focus:bg-white focus:outline-hidden focus:ring-2 ${
+                        fieldErrors.presentAddress
+                          ? 'border-rose-500 ring-2 ring-rose-200'
+                          : 'border-slate-300 focus:ring-blue-500'
+                      }`}
                     ></textarea>
+                    {fieldErrors.presentAddress && (
+                      <span className="text-[11px] text-rose-600 font-semibold mt-1 block">
+                        {fieldErrors.presentAddress}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Step 4: Admission Fees & Payment (Modeled after aisc.edu.bd/online/admission-fees) */}
+              {/* Step 4: Admission Fees & Payment */}
               <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <CreditCard className="w-5 h-5 text-blue-700" />
-                    ৪. অনলাইন ভর্তি ফি ও পেমেন্ট বিবরণী
+                    ৪. ভর্তি ফি ও পরিশোধ পদ্ধতি
                   </h3>
                   <span className="text-xs font-bold text-blue-800 bg-blue-100 px-3 py-1 rounded-full font-mono">
                     ভর্তি ফি: ৳ {admissionFee}
@@ -570,36 +730,35 @@ export const PublicAdmission: React.FC = () => {
                         : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    স্কুল এন্ড কলেজ অফিসে জমা
+                    মাদরাসা অফিসে জমা (বকেয়া)
                   </button>
                 </div>
 
                 {paymentMethod !== 'office' ? (
                   <div className="bg-white p-4 rounded-2xl border border-slate-200 space-y-3">
                     <p className="text-xs text-slate-600">
-                      নিচের নম্বরে <strong>৳{admissionFee}</strong> Send Money / Payment করুন এবং Transaction ID টি নিচে প্রদান করুন:
+                      নিচের নম্বরে <strong>৳{admissionFee}</strong> Send Money / Payment করুন এবং Transaction ID টি নিচে দিন (যদি এখনই প্রদান না করতে চান তবে মাদরাসা অফিসে জমার বিকল্পটি নির্বাচন করুন):
                     </p>
                     <div className="font-mono text-xs font-bold text-blue-900 bg-blue-50 p-2.5 rounded-xl border border-blue-200 flex items-center justify-between">
                       <span>
                         {paymentMethod === 'bkash'
-                          ? `বিকাশ মার্চেন্ট: ${madrasaInfo.bkashMerchantNumber}`
+                          ? `বিকাশ মার্চেন্ট: ${madrasaInfo.bkashMerchantNumber || '01700-000000'}`
                           : paymentMethod === 'nagad'
-                          ? `নগদ মার্চেন্ট: ${madrasaInfo.nagadMerchantNumber}`
-                          : `রকেট একাউন্ট: ${madrasaInfo.rocketNumber}`}
+                          ? `নগদ মার্চেন্ট: ${madrasaInfo.nagadMerchantNumber || '01800-000000'}`
+                          : `রকেট একাউন্ট: ${madrasaInfo.rocketNumber || '01900-000000'}`}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-slate-700 mb-1">
-                          Transaction ID (TrxID) *
+                          Transaction ID (TrxID)
                         </label>
                         <input
                           type="text"
-                          required
                           value={transactionId}
                           onChange={(e) => setTransactionId(e.target.value)}
-                          placeholder="উদাঃ 9X87K2LM"
+                          placeholder="উদাঃ 9X87K2LM (ঐচ্ছিক)"
                           className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono uppercase focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
@@ -611,27 +770,46 @@ export const PublicAdmission: React.FC = () => {
                           type="text"
                           value={senderNumber}
                           onChange={(e) => setSenderNumber(e.target.value)}
-                          placeholder="01XXXXXXXXX"
+                          placeholder="01XXXXXXXXX (ঐচ্ছিক)"
                           className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-500 italic">
-                    * ভর্তি পরীক্ষার দিন স্কুল এন্ড কলেজ ক্যাশ কাউন্টারে ভর্তি ফি জমা দিয়ে অফিশিয়াল রসিদ সংগ্রহ করতে পারবেন।
+                  <p className="text-xs text-blue-800 bg-blue-50 p-3 rounded-xl border border-blue-200">
+                    ℹ️ ভর্তি আবেদন অনুমোদনের পর বা উপস্থিতির দিন মাদরাসা ক্যাশ কাউন্টারে ভর্তি ফি (৳{admissionFee}) নগদ জমা দিয়ে অফিশিয়াল রসিদ সংগ্রহ করতে পারবেন।
                   </p>
                 )}
               </div>
+
+              {/* Submit Error Warning Banner if any */}
+              {formError && (
+                <div className="bg-rose-50 border border-rose-300 text-rose-800 p-3 rounded-xl text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{formError}</span>
+                </div>
+              )}
 
               {/* Submit Button */}
               <div className="text-center pt-2">
                 <button
                   type="submit"
-                  className="bg-blue-800 hover:bg-blue-900 text-white font-bold py-3.5 px-10 rounded-2xl text-sm sm:text-base shadow-xl transition flex items-center justify-center gap-2 mx-auto cursor-pointer"
+                  disabled={isSubmitting}
+                  id="submit-admission-application-btn"
+                  className="bg-blue-800 hover:bg-blue-900 active:scale-98 disabled:opacity-60 text-white font-bold py-3.5 px-10 rounded-2xl text-sm sm:text-base shadow-xl transition flex items-center justify-center gap-2 mx-auto cursor-pointer"
                 >
-                  <Sparkles className="w-5 h-5 text-amber-300" />
-                  ভর্তি আবেদন দাখিল ও স্লিপ সংগ্রহ করুন
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      আবেদন দাখিল হচ্ছে...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-5 h-5 text-amber-300" />
+                      ভর্তি আবেদন দাখিল ও স্লিপ সংগ্রহ করুন
+                    </>
+                  )}
                 </button>
                 <p className="text-[11px] text-slate-400 mt-2">
                   দাখিল করার পরপরই তাৎক্ষণিক প্রিন্টযোগ্য আবেদন স্লিপ প্রদর্শিত হবে।

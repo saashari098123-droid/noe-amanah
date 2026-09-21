@@ -1,6 +1,21 @@
 import { FeePayment, MadrasaInfo } from '../types';
 
 /**
+ * Format receipt month showing Arabic or English category accurately
+ */
+function formatReceiptMonth(receipt: FeePayment): string {
+  const isHijri =
+    receipt.monthCategory === 'hijri' ||
+    /মুহাররম|সফর|রবিউল|জুমাদাল|রজব|শা'বান|রমজান|শাওয়াল|জিলক্বদ|জিলহজ্জ/.test(receipt.month);
+  const tag = isHijri ? '🌙 আরবি মাস (হিজরি)' : '📅 ইংরেজি মাস';
+  if (/\d/.test(receipt.month)) {
+    return `${receipt.month} [${tag}]`;
+  }
+  const yearVal = receipt.year || (isHijri ? 1448 : 2026);
+  return `${receipt.month} ${yearVal} [${tag}]`;
+}
+
+/**
  * Generates an elegant, self-contained HTML page for the money receipt
  */
 export function generateReceiptHtml(
@@ -286,9 +301,22 @@ export function generateReceiptHtml(
           <td class="value" style="text-align: right;">${receipt.studentName || 'শিক্ষার্থী'}</td>
         </tr>
         <tr>
-          <td class="label">পরিশোধের মাস ও বছর:</td>
-          <td class="value" style="text-align: right;">${receipt.month} (${receipt.year || 2026})</td>
+          <td class="label">পরিশোধের মাস ও ক্যাটাগরি:</td>
+          <td class="value" style="text-align: right;">${formatReceiptMonth(receipt)}</td>
         </tr>
+        ${(receipt.waivedAmount || receipt.discount) ? `
+        <tr>
+          <td class="label">নির্ধারিত নিয়মিত ফি:</td>
+          <td class="value mono" style="text-align: right;">৳${(receipt.originalFee || (receipt.amount + (receipt.waivedAmount || receipt.discount || 0))).toLocaleString('en-IN')}/-</td>
+        </tr>
+        <tr style="background-color: #fffbeb;">
+          <td class="label" style="color: #b45309; font-weight: bold;">বিশেষ ছাড় / মওকুফ (Waiver):</td>
+          <td class="value" style="text-align: right; color: #b45309; font-weight: bold;">
+            - ৳${(receipt.waivedAmount || receipt.discount || 0).toLocaleString('en-IN')}/-
+            <div style="font-size: 11px; font-weight: normal; color: #92400e;">${receipt.waiverReason || 'আর্থিক অসচ্ছলতা বিবেচনায় মওকুফ (ভবিষ্যতে বকেয়া নয়)'}</div>
+          </td>
+        </tr>
+        ` : ''}
         <tr>
           <td class="label">পেমেন্ট মেথড:</td>
           <td class="value mono" style="text-align: right;">${method}</td>
@@ -440,10 +468,23 @@ export async function downloadReceiptImage(
   ctx.fillText(receipt.className || 'সাধারণ', 520, 352);
 
   // Payment Breakdown Table
-  const rows = [
+  const rows: Array<{ label: string; val: string; isDue?: boolean; isWaiver?: boolean }> = [
     { label: 'শিক্ষার্থীর নাম:', val: receipt.studentName || 'শিক্ষার্থী' },
-    { label: 'পরিশোধের মাস ও বছর:', val: `${receipt.month} (${receipt.year || 2026})` },
+    { label: 'পরিশোধের মাস ও ক্যাটাগরি:', val: formatReceiptMonth(receipt) },
     { label: 'ফি ক্যাটাগরি / বিবরণ:', val: receipt.feeTypeLabel || 'মাসিক টিউশন ও খাদ্য ফি' },
+    ...(receipt.waivedAmount || receipt.discount
+      ? [
+          {
+            label: 'নির্ধারিত নিয়মিত ফি:',
+            val: `৳${(receipt.originalFee || (receipt.amount + (receipt.waivedAmount || receipt.discount || 0))).toLocaleString('en-IN')}/-`,
+          },
+          {
+            label: 'বিশেষ ছাড় / মওকুফ (Waiver):',
+            val: `- ৳${(receipt.waivedAmount || receipt.discount || 0).toLocaleString('en-IN')}/- ${receipt.waiverReason ? `(${receipt.waiverReason})` : '(বকেয়ামুক্ত)'}`,
+            isWaiver: true,
+          },
+        ]
+      : []),
     { label: 'পরিশোধের মাধ্যম (Method):', val: (receipt.paymentMethod || 'cash').toUpperCase() },
     { label: 'ট্রানজেকশন আইডি (TrxID):', val: receipt.transactionId || 'কাউন্টার ক্যাশ' },
     {
@@ -462,6 +503,8 @@ export async function downloadReceiptImage(
 
     if (r.isDue) {
       ctx.fillStyle = dueAmount > 0 ? '#b91c1c' : '#059669';
+    } else if (r.isWaiver) {
+      ctx.fillStyle = '#b45309';
     } else {
       ctx.fillStyle = '#0f172a';
     }
@@ -604,8 +647,8 @@ export async function printReceipt(
             <td style="padding: 8px 0; font-weight: bold; text-align: right;">${receipt.studentName || 'শিক্ষার্থী'}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 0; color: #64748b;">পরিশোধের মাস:</td>
-            <td style="padding: 8px 0; font-weight: bold; text-align: right;">${receipt.month} (${receipt.year || 2026})</td>
+            <td style="padding: 8px 0; color: #64748b;">পরিশোধের মাস ও ক্যাটাগরি:</td>
+            <td style="padding: 8px 0; font-weight: bold; text-align: right;">${formatReceiptMonth(receipt)}</td>
           </tr>
           <tr style="border-bottom: 1px solid #f1f5f9;">
             <td style="padding: 8px 0; color: #64748b;">পেমেন্ট মেথড:</td>

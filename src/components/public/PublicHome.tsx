@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { PrayerWidget } from '../common/PrayerWidget';
+import { MadrasaBannerCard } from './MadrasaBannerCard';
+import { UserAvatar } from '../common/UserAvatar';
 import {
   BookOpen,
   Award,
@@ -79,13 +82,23 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
   return (
     <div className="space-y-12 pb-16 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+      {/* Official Madrasa Banner Card */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6">
+        <MadrasaBannerCard />
+      </div>
+
       {/* 1. Hero Banner */}
       <section className="relative overflow-hidden bg-gradient-to-br from-emerald-900 via-emerald-950 to-slate-950 text-white py-16 sm:py-24 px-4 sm:px-6 transition-colors duration-500 shadow-lg">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]"></div>
 
         <div className="relative max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-          {/* Left Hero Content */}
-          <div className="lg:col-span-7 space-y-6">
+          {/* Left Hero Content with Motion */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="lg:col-span-7 space-y-6"
+          >
             <div className="inline-flex items-center gap-2 bg-emerald-800/80 border border-emerald-700/80 px-3.5 py-1.5 rounded-full text-xs font-medium text-amber-300 shadow-inner">
               <Sparkles className="w-3.5 h-3.5" />
               <span>
@@ -107,28 +120,32 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-3.5 pt-2">
-              <button
+              <motion.button
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 id="hero-admission-btn"
                 onClick={() => setActivePublicTab('admission')}
-                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold px-6 py-3 rounded-xl text-sm flex items-center gap-2 transition transform hover:-translate-y-0.5 shadow-md cursor-pointer"
+                className="bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold px-6 py-3 rounded-xl text-sm flex items-center gap-2 transition shadow-md cursor-pointer"
               >
                 <GraduationCap className="w-5 h-5" />
                 অনলাইন ভর্তি আবেদন করুন
-              </button>
+              </motion.button>
 
-              <button
+              <motion.button
+                whileHover={{ scale: 1.03, y: -2 }}
+                whileTap={{ scale: 0.98 }}
                 id="hero-result-btn"
                 onClick={() => setActivePublicTab('results')}
                 className="bg-white/15 hover:bg-white/25 text-white font-bold px-5 py-3 rounded-xl text-sm flex items-center gap-2 border border-white/20 transition cursor-pointer"
               >
                 <Award className="w-5 h-5 text-amber-400" />
                 পরীক্ষার রেজাল্ট দেখুন
-              </button>
+              </motion.button>
             </div>
 
             {/* Highlights Bar */}
             <div className="pt-6 grid grid-cols-3 gap-3 border-t border-white/20">
-              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 text-center">
+              <motion.div whileHover={{ y: -2 }} className="bg-white/10 p-2.5 rounded-xl border border-white/10 text-center">
                 <div className="text-xl sm:text-2xl font-bold text-amber-300 font-mono">
                   {language === 'ar'
                     ? `${toArDigits(students.length)}+`
@@ -139,8 +156,8 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 <div className="text-[11px] opacity-80">
                   {language === 'ar' ? 'إجمالي الطلاب' : language === 'en' ? 'Total Students' : 'মোট শিক্ষার্থী'}
                 </div>
-              </div>
-              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 text-center">
+              </motion.div>
+              <motion.div whileHover={{ y: -2 }} className="bg-white/10 p-2.5 rounded-xl border border-white/10 text-center">
                 <div className="text-xl sm:text-2xl font-bold text-amber-300 font-mono">
                   {language === 'ar'
                     ? `${toArDigits(teachers.length)}+`
@@ -151,20 +168,25 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 <div className="text-[11px] opacity-80">
                   {language === 'ar' ? 'الأساتذة والمحدثون' : language === 'en' ? 'Teachers & Scholars' : 'অভিজ্ঞ মুহাদ্দিস ও শিক্ষক'}
                 </div>
-              </div>
-              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 text-center">
+              </motion.div>
+              <motion.div whileHover={{ y: -2 }} className="bg-white/10 p-2.5 rounded-xl border border-white/10 text-center">
                 <div className="text-xl sm:text-2xl font-bold text-amber-300 font-mono">
                   {language === 'ar' ? '١٠٠٪' : language === 'en' ? '100%' : '১০০%'}
                 </div>
                 <div className="text-[11px] opacity-80">
                   {language === 'ar' ? 'نسبة نجاح الامتحانات' : language === 'en' ? 'Exam Success Rate' : 'বোর্ড পরীক্ষার সাফল্য'}
                 </div>
-              </div>
+              </motion.div>
             </div>
-          </div>
+          </motion.div>
 
-          {/* Right Hero: Campus & Muhtamim Card */}
-          <div className="lg:col-span-5 space-y-4">
+          {/* Right Hero: Campus & Muhtamim Card with Motion */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.15, ease: 'easeOut' }}
+            className="lg:col-span-5 space-y-4"
+          >
             <div className="relative rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 group">
               <img
                 src="https://images.unsplash.com/photo-1591604129939-f1efa4d9f7fa?w=800&auto=format&fit=crop&q=80"
@@ -196,7 +218,7 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 "{madrasaInfo.principalMessage}"
               </p>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -227,8 +249,10 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {topStudentsList.map((rank, index) => (
-              <div
+              <motion.div
                 key={rank.studentId}
+                whileHover={{ y: -6 }}
+                transition={{ duration: 0.2 }}
                 className="bg-gradient-to-b from-slate-50 to-white dark:from-slate-800 dark:to-slate-850 p-5 rounded-2xl border-2 border-amber-400/40 dark:border-amber-500/30 shadow-md hover:shadow-xl transition flex flex-col justify-between group relative overflow-hidden"
               >
                 {/* Ribbon Rank Badge */}
@@ -239,18 +263,11 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
                 <div>
                   <div className="flex items-center gap-3.5 mb-3.5 mt-2">
-                    <img
-                      src={
-                        rank.photoUrl ||
-                        rank.avatar ||
-                        'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=200&auto=format&fit=crop&q=80'
-                      }
+                    <UserAvatar
+                      src={rank.photoUrl || rank.avatar}
                       alt={rank.studentName}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=200&auto=format&fit=crop&q=80';
-                      }}
-                      className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shadow-xs group-hover:scale-105 transition shrink-0 bg-slate-100"
+                      type="student"
+                      className="w-14 h-14 rounded-full object-cover border-2 border-amber-400 shadow-xs group-hover:scale-105 transition shrink-0"
                     />
                     <div className="overflow-hidden">
                       <h3 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white truncate">
@@ -294,7 +311,7 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                     <CheckCircle2 className="w-3.5 h-3.5" /> উত্তীর্ণ
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -412,8 +429,10 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {notices.slice(0, 4).map((notice) => (
-            <div
+            <motion.div
               key={notice.id}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.2 }}
               onClick={() => setActivePublicTab('notices')}
               className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-xs hover:shadow-md border border-slate-200 dark:border-slate-700 transition cursor-pointer flex flex-col justify-between group"
             >
@@ -447,7 +466,7 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                   সম্পূর্ণ পড়ুন <ChevronRight className="w-3.5 h-3.5" />
                 </span>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
@@ -468,7 +487,11 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Card 1: Hifz */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-lg border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between">
+          <motion.div
+            whileHover={{ y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between"
+          >
             <div>
               <div className="h-40 overflow-hidden relative">
                 <img
@@ -507,10 +530,14 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 হিফজে ভর্তি তথ্য দেখুন
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Card 2: Kitab */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-lg border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between">
+          <motion.div
+            whileHover={{ y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between"
+          >
             <div>
               <div className="h-40 overflow-hidden relative">
                 <img
@@ -549,10 +576,14 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 সিলেবাস ও জামাতসমূহ
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Card 3: Noorani */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-lg border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between">
+          <motion.div
+            whileHover={{ y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between"
+          >
             <div>
               <div className="h-40 overflow-hidden relative">
                 <img
@@ -591,10 +622,14 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 নূরানী ভর্তি আবেদন
               </button>
             </div>
-          </div>
+          </motion.div>
 
           {/* Card 4: General & ICT */}
-          <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-lg border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between">
+          <motion.div
+            whileHover={{ y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl border border-slate-200 dark:border-slate-700 transition group flex flex-col justify-between"
+          >
             <div>
               <div className="h-40 overflow-hidden relative">
                 <img
@@ -633,7 +668,7 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                 সুবিধাসমূহ জানুন
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       </section>
 
@@ -659,8 +694,10 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {mediaEvents.map((media) => (
-              <div
+              <motion.div
                 key={media.id}
+                whileHover={{ y: -5 }}
+                transition={{ duration: 0.2 }}
                 onClick={() => setActivePublicTab('gallery')}
                 className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-xs hover:shadow-lg transition cursor-pointer group"
               >
@@ -693,7 +730,7 @@ export const PublicHome: React.FC<PublicHomeProps> = ({ onOpenLogin }) => {
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{media.description}</p>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
         </div>

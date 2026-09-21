@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
+import { UserAvatar } from '../common/UserAvatar';
 import {
   CalendarCheck,
   CheckCircle2,
@@ -24,6 +25,15 @@ import confetti from 'canvas-confetti';
 import { getHijriDateString, formatDualDate } from '../../utils/hijriDate';
 import { ClassRoutine } from '../../types';
 
+// Helper to get local date in YYYY-MM-DD format
+const getLocalTodayDate = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export const TeacherAttendance: React.FC = () => {
   const {
     currentTeacher,
@@ -45,9 +55,7 @@ export const TeacherAttendance: React.FC = () => {
   const [selectedClassId, setSelectedClassId] = useState<string>(
     currentTeacher?.assignedClasses[0] || classes[0]?.id || 'cls-madani-1'
   );
-  const [attendanceDate, setAttendanceDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+  const [attendanceDate, setAttendanceDate] = useState<string>(getLocalTodayDate());
 
   // Period / Hour Selection
   const [selectedPeriodNumber, setSelectedPeriodNumber] = useState<number>(1);
@@ -73,17 +81,19 @@ export const TeacherAttendance: React.FC = () => {
   // Initializing status map
   React.useEffect(() => {
     const initialMap: Record<string, 'present' | 'absent' | 'leave' | 'late'> = {};
+    const normPeriod = Number(selectedPeriodNumber || 1);
     classStudents.forEach((st) => {
+      const normStudentId = st.id.trim().toLowerCase();
       const existing = attendance.find(
         (a) =>
-          a.studentId === st.id &&
+          a.studentId?.trim().toLowerCase() === normStudentId &&
           a.date === attendanceDate &&
-          (a.periodNumber === selectedPeriodNumber || !a.periodNumber)
+          Number(a.periodNumber || 1) === normPeriod
       );
       initialMap[st.id] = existing ? existing.status : 'present';
     });
     setAttendanceMap(initialMap);
-  }, [selectedClassId, attendanceDate, selectedPeriodNumber]);
+  }, [selectedClassId, attendanceDate, selectedPeriodNumber, attendance, students]);
 
   // Update custom period name when selecting routine
   const handleSelectPeriod = (periodNum: number, name: string) => {
@@ -143,19 +153,30 @@ export const TeacherAttendance: React.FC = () => {
   // Save Attendance & auto-dispatch SMS
   const handleSaveAttendance = () => {
     const selectedClass = classes.find((c) => c.id === selectedClassId);
-    const records = classStudents.map((st) => ({
-      studentId: st.id,
-      studentName: st.nameBangla,
-      classId: selectedClassId,
-      className: selectedClass?.nameBangla || selectedClass?.name || 'জামাত',
-      date: attendanceDate,
-      status: attendanceMap[st.id] || 'present',
-      periodNumber: selectedPeriodNumber,
-      periodName: customPeriodName,
-      recordedByTeacherId: currentTeacher?.id || 'T-101',
-      recordedBy: currentTeacher?.nameBangla || 'শ্রেণি শিক্ষক',
-      guardianPhone: st.guardianPhone,
-    }));
+    const normPeriod = Number(selectedPeriodNumber || 1);
+    const records = classStudents.map((st) => {
+      const normStudentId = st.id.trim().toLowerCase();
+      const existing = attendance.find(
+        (a) =>
+          a.studentId?.trim().toLowerCase() === normStudentId &&
+          a.date === attendanceDate &&
+          Number(a.periodNumber || 1) === normPeriod
+      );
+      return {
+        studentId: st.id,
+        studentName: st.nameBangla,
+        classId: selectedClassId,
+        className: selectedClass?.nameBangla || selectedClass?.name || 'জামাত',
+        date: attendanceDate,
+        status: attendanceMap[st.id] || 'present',
+        periodNumber: normPeriod,
+        periodName: customPeriodName,
+        recordedByTeacherId: currentTeacher?.id || 'T-101',
+        recordedBy: currentTeacher?.nameBangla || 'শ্রেণি শিক্ষক',
+        guardianPhone: st.guardianPhone,
+        smsAlertSent: existing?.smsAlertSent || false,
+      };
+    });
 
     if (markBulkAttendance) {
       markBulkAttendance(records);
@@ -168,7 +189,9 @@ export const TeacherAttendance: React.FC = () => {
   };
 
   const presentCount = classStudents.filter((s) => (attendanceMap[s.id] || 'present') === 'present').length;
-  const absentCount = classStudents.length - presentCount;
+  const absentCount = classStudents.filter((s) => attendanceMap[s.id] === 'absent').length;
+  const leaveCount = classStudents.filter((s) => attendanceMap[s.id] === 'leave').length;
+  const lateCount = classStudents.filter((s) => attendanceMap[s.id] === 'late').length;
 
   // Selected date Hijri calculation
   const selectedDateObj = new Date(attendanceDate);
@@ -406,9 +429,10 @@ export const TeacherAttendance: React.FC = () => {
 
                           <td className="p-3">
                             <div className="flex items-center gap-3">
-                              <img
+                              <UserAvatar
                                 src={st.photoUrl}
                                 alt={st.nameBangla}
+                                type="student"
                                 className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
                               />
                               <div>

@@ -3,6 +3,7 @@ import { useMadrasa } from '../../context/MadrasaContext';
 import { Student } from '../../types';
 import { ImageUploadHelper } from '../common/ImageUploadHelper';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
+import { UserAvatar } from '../common/UserAvatar';
 import { AdminExcelGoogleDriveModal } from './AdminExcelGoogleDriveModal';
 import {
   Users,
@@ -22,8 +23,17 @@ import {
   FileSpreadsheet,
   Upload,
   Download,
+  MoreVertical,
+  Moon,
+  AlertCircle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import {
+  HIJRI_MONTHS,
+  ENGLISH_MONTHS,
+  AVAILABLE_HIJRI_YEARS,
+  AVAILABLE_ENGLISH_YEARS,
+} from '../../utils/feeCalculator';
 
 export const AdminStudents: React.FC = () => {
   const { students, classes, addStudent, updateStudent, deleteStudent } = useMadrasa();
@@ -37,6 +47,7 @@ export const AdminStudents: React.FC = () => {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isStudentMoreOpen, setIsStudentMoreOpen] = useState(false);
   const [excelModalTab, setExcelModalTab] = useState<'excel_import' | 'excel_export' | 'google_drive'>('excel_import');
 
   const showToast = (msg: string) => {
@@ -60,7 +71,13 @@ export const AdminStudents: React.FC = () => {
   const [monthlyFee, setMonthlyFee] = useState(4000);
   const [address, setAddress] = useState('');
   const [bloodGroup, setBloodGroup] = useState('B+');
-  const [photoUrl, setPhotoUrl] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80');
+  const [photoUrl, setPhotoUrl] = useState('');
+  // Admission and Session tracking
+  const [admissionHijriMonth, setAdmissionHijriMonth] = useState('মুহাররম');
+  const [admissionHijriYear, setAdmissionHijriYear] = useState(1448);
+  const [admissionEnglishMonth, setAdmissionEnglishMonth] = useState('মে');
+  const [admissionEnglishYear, setAdmissionEnglishYear] = useState(2026);
+  const [admissionDate, setAdmissionDate] = useState('২০২৬-০৫-০১');
 
   const filteredStudents = students.filter((st) => {
     const matchClass = selectedClassFilter === 'all' || st.classId === selectedClassFilter;
@@ -75,8 +92,17 @@ export const AdminStudents: React.FC = () => {
 
   const openAddModal = () => {
     setEditingStudentId(null);
-    setId(`DA-2026-${100 + students.length + 1}`);
-    setPassword('student123');
+    let suggestedId = '';
+    let attempt = 0;
+    do {
+      const randNum = 100 + students.length + 1 + attempt;
+      suggestedId = `DA-2026-${randNum}`;
+      attempt++;
+    } while (students.some((s) => s.id === suggestedId) && attempt < 100);
+
+    const randomPass = Math.floor(100000 + Math.random() * 900000).toString();
+    setId(suggestedId);
+    setPassword(randomPass);
     setEmail('');
     setNameBangla('');
     setNameEnglish('');
@@ -90,14 +116,19 @@ export const AdminStudents: React.FC = () => {
     setMonthlyFee(4000);
     setAddress('');
     setBloodGroup('B+');
-    setPhotoUrl('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80');
+    setPhotoUrl('');
+    setAdmissionHijriMonth('মুহাররম');
+    setAdmissionHijriYear(1448);
+    setAdmissionEnglishMonth('মে');
+    setAdmissionEnglishYear(2026);
+    setAdmissionDate('২০২৬-০৫-০১');
     setIsModalOpen(true);
   };
 
   const openEditModal = (st: Student) => {
     setEditingStudentId(st.id);
     setId(st.id);
-    setPassword(st.password || 'student123');
+    setPassword(st.password || '');
     setEmail(st.email || '');
     setNameBangla(st.nameBangla);
     setNameEnglish(st.nameEnglish || '');
@@ -112,6 +143,11 @@ export const AdminStudents: React.FC = () => {
     setAddress(st.address || '');
     setBloodGroup(st.bloodGroup || 'B+');
     setPhotoUrl(st.photoUrl || '');
+    setAdmissionHijriMonth(st.admissionHijriMonth || 'মুহাররম');
+    setAdmissionHijriYear(st.admissionHijriYear || 1448);
+    setAdmissionEnglishMonth(st.admissionEnglishMonth || 'মে');
+    setAdmissionEnglishYear(st.admissionEnglishYear || 2026);
+    setAdmissionDate(st.admissionDate || '২০২৬-০৫-০১');
     setIsModalOpen(true);
   };
 
@@ -119,14 +155,33 @@ export const AdminStudents: React.FC = () => {
     e.preventDefault();
     const selClass = classes.find((c) => c.id === classId);
     const resolvedClassName = selClass ? selClass.name : 'জামাত';
+    const targetId = id.trim();
+    const targetRoll = Number(roll);
 
+    if (!editingStudentId) {
+      const existingWithId = students.find((s) => s.id.toLowerCase() === targetId.toLowerCase());
+      if (existingWithId) {
+        alert('এই আইডি already আছে! অনুগ্রহ করে ভিন্ন আইডি দিন।');
+        return;
+      }
+    }
+
+    const rollConflict = students.find(
+      (s) => s.classId === classId && s.roll === targetRoll && s.id.toLowerCase() !== targetId.toLowerCase()
+    );
+    if (rollConflict) {
+      alert(`এই শ্রেণি/জামাতে ${targetRoll} রোল নম্বরটি ইতিমধ্যে "${rollConflict.nameBangla}" (আইডি: ${rollConflict.id}) এর জন্য ব্যবহৃত হয়েছে। অনুগ্রহ করে ভিন্ন রোল নম্বর দিন।`);
+      return;
+    }
+
+    const randomPass = Math.floor(100000 + Math.random() * 900000).toString();
     const studentData: Student = {
-      id: id.trim(),
-      password: password.trim() || 'student123',
+      id: targetId,
+      password: password.trim() || randomPass,
       email: email.trim() || undefined,
       nameBangla: nameBangla.trim(),
       nameEnglish: nameEnglish.trim() || undefined,
-      roll: Number(roll),
+      roll: targetRoll,
       classId,
       className: resolvedClassName,
       year: Number(year),
@@ -135,7 +190,11 @@ export const AdminStudents: React.FC = () => {
       guardianPhone: guardianPhone.trim() || undefined,
       residentialStatus,
       monthlyFee: Number(monthlyFee),
-      admissionDate: new Date().toLocaleDateString('bn-BD'),
+      admissionDate: admissionDate || new Date().toLocaleDateString('bn-BD'),
+      admissionHijriMonth,
+      admissionHijriYear: Number(admissionHijriYear),
+      admissionEnglishMonth,
+      admissionEnglishYear: Number(admissionEnglishYear),
       photoUrl,
       address: address.trim() || undefined,
       bloodGroup: bloodGroup.trim() || undefined,
@@ -166,33 +225,86 @@ export const AdminStudents: React.FC = () => {
           <div>
             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <Users className="w-5 h-5 text-blue-600" />
-              প্রতিষ্ঠানের ছাত্র তালিকা ও আইডি নম্বর ব্যবস্থাপনা
+              ছাত্র তালিকা ও আইডি ব্যবস্থাপনা
             </h2>
-            <p className="text-xs text-slate-500">
-              মোট নিবন্ধিত শিক্ষার্থী: {students.length} জন • শুধুমাত্র অ্যাডমিন কর্তৃক প্রদত্ত আইডি দিয়েই ছাত্ররা লগইন করতে পারবে
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => {
-                setExcelModalTab('excel_import');
-                setIsExcelModalOpen(true);
-              }}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3.5 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-              title="এক্সেলে শিক্ষার্থীদের তথ্য প্রস্তুত করে একসাথে আপলোড করুন"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-amber-300" />
-              <span>এক্সেল ইম্পোর্ট / এক্সপোর্ট</span>
-            </button>
-
+          <div className="flex items-center gap-2">
             <button
               onClick={openAddModal}
-              className="bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold h-10 px-4 rounded-xl text-xs sm:text-sm inline-flex items-center gap-2 transition shadow-xs hover:shadow-md cursor-pointer shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>নতুন ছাত্র ভর্তি</span>
             </button>
+
+            {/* Three-Dot Menu for Excel & Cloud Sync */}
+            <div className="relative">
+              <button
+                id="students-more-options-btn"
+                onClick={() => setIsStudentMoreOpen((prev) => !prev)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-3 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="এক্সেল ও অতিরিক্ত টুলস"
+              >
+                <MoreVertical className="w-4 h-4 text-slate-700" />
+                <span className="hidden sm:inline">টুলস</span>
+              </button>
+
+              {isStudentMoreOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsStudentMoreOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-64 bg-white text-slate-800 border border-slate-200 rounded-2xl shadow-2xl p-2 z-50 space-y-1.5 text-xs animate-in fade-in zoom-in-95">
+                    <button
+                      onClick={() => {
+                        setExcelModalTab('excel_import');
+                        setIsExcelModalOpen(true);
+                        setIsStudentMoreOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-emerald-50 text-emerald-900 transition text-left cursor-pointer"
+                    >
+                      <Upload className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">এক্সেল বাল্ক ইম্পোর্ট</div>
+                        <div className="text-[11px] text-slate-500">এক ক্লিকে একাধিক ছাত্র আপলোড</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setExcelModalTab('excel_export');
+                        setIsExcelModalOpen(true);
+                        setIsStudentMoreOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-blue-50 text-blue-900 transition text-left cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">এক্সেল এক্সপোর্ট / ডাউনলোড</div>
+                        <div className="text-[11px] text-slate-500">সকল ছাত্রের তালিকা সংরক্ষণ</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setExcelModalTab('google_drive');
+                        setIsExcelModalOpen(true);
+                        setIsStudentMoreOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-amber-50 text-amber-900 transition text-left cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">গুগল ড্রাইভ ক্লাউড সিঙ্ক</div>
+                        <div className="text-[11px] text-slate-500">ড্রাইভ ব্যাকআপ কনফিগারেশন</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -285,10 +397,11 @@ export const AdminStudents: React.FC = () => {
 
                     <td className="p-3">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={st.photoUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80'}
+                        <UserAvatar
+                          src={st.photoUrl}
                           alt={st.nameBangla}
-                          className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-100"
+                          type="student"
+                          className="w-10 h-10 rounded-xl object-cover border border-slate-200 shrink-0"
                         />
                         <div>
                           <div className="font-bold text-slate-900 text-sm">{st.nameBangla}</div>
@@ -300,6 +413,10 @@ export const AdminStudents: React.FC = () => {
                     <td className="p-3">
                       <div className="font-semibold text-slate-800">{st.className}</div>
                       <div className="text-[10px] text-slate-400">শিক্ষাবর্ষ: {st.year || 2026}</div>
+                      <div className="text-[10px] text-emerald-800 font-medium mt-1 bg-emerald-50 px-2 py-0.5 rounded-md inline-flex items-center gap-1 border border-emerald-200">
+                        <Moon className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                        ভর্তি: {st.admissionHijriMonth || 'মুহাররম'} {st.admissionHijriYear || 1448}
+                      </div>
                     </td>
 
                     <td className="p-3 text-slate-600">
@@ -373,12 +490,19 @@ export const AdminStudents: React.FC = () => {
                   <input
                     type="text"
                     required
+                    readOnly={Boolean(editingStudentId)}
                     value={id}
                     onChange={(e) => setId(e.target.value)}
                     placeholder="যেমন: DA-2026-101"
-                    className="w-full px-3 py-1.5 bg-white border border-blue-300 rounded-lg text-xs font-mono font-bold text-blue-950 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                    className={`w-full px-3 py-1.5 border rounded-lg text-xs font-mono font-bold focus:outline-hidden ${
+                      editingStudentId
+                        ? 'bg-slate-100 text-slate-500 border-slate-300 cursor-not-allowed'
+                        : 'bg-white border-blue-300 text-blue-950 focus:ring-2 focus:ring-blue-500'
+                    }`}
                   />
-                  <p className="text-[10px] text-blue-700">এই আইডি নম্বরটি দিয়েই ছাত্র লগইন করবে</p>
+                  <p className="text-[10px] text-blue-700">
+                    {editingStudentId ? 'সম্পাদনার সময় ছাত্র আইডি অপরিবর্তনযোগ্য' : 'এই আইডি নম্বরটি দিয়েই ছাত্র লগইন করবে'}
+                  </p>
                 </div>
 
                 <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-100 space-y-1">
@@ -389,10 +513,10 @@ export const AdminStudents: React.FC = () => {
                     type="text"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="ডিফল্ট: student123"
+                    placeholder="পাসওয়ার্ড লিখুন বা ফাঁকা রাখুন"
                     className="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-mono font-bold text-amber-950 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
                   />
-                  <p className="text-[10px] text-amber-700">ছাত্রের পাসওয়ার্ড (ডিফল্ট: student123)</p>
+                  <p className="text-[10px] text-amber-700">ছাত্রের নিজস্ব লগইন পাসওয়ার্ড</p>
                 </div>
 
                 <div>
@@ -486,6 +610,86 @@ export const AdminStudents: React.FC = () => {
                     onChange={(e) => setMonthlyFee(Number(e.target.value))}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
                   />
+                </div>
+
+                {/* ভর্তি সন ও মাস (বেতন নির্ধারণের মূল ভিত্তি) */}
+                <div className="sm:col-span-2 bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Moon className="w-4 h-4 text-emerald-700" />
+                    <span className="text-xs font-bold text-emerald-950">
+                      ভর্তির সময়কাল ও বেতন প্রারম্ভ নির্ধারণ (Admission & Fee Calculation Basis)
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    💡 কোনো শিক্ষার্থী শিক্ষাবর্ষের শুরুতে বা পরবর্তীতে যেকোনো মাসে (যেমন: ১৪৪৮ হিজরির জিলকদ মাসে) ভর্তি হলে এখানে তার ভর্তির সঠিক মাস নির্বাচন করে দিন। সফটওয়্যার স্বয়ংক্রিয়ভাবে সেই মাস থেকেই বেতন হিসাব করবে এবং ভর্তির পূর্ববর্তী মাসের কোনো অবাস্তব বকেয়া দেখাবে না।
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        🌙 ভর্তির আরবি মাস (হিজরি) *
+                      </label>
+                      <select
+                        value={admissionHijriMonth}
+                        onChange={(e) => setAdmissionHijriMonth(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-emerald-950 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {HIJRI_MONTHS.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        ভর্তির হিজরি শিক্ষাবর্ষ *
+                      </label>
+                      <select
+                        value={admissionHijriYear}
+                        onChange={(e) => setAdmissionHijriYear(Number(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-emerald-950 focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
+                      >
+                        {AVAILABLE_HIJRI_YEARS.map((yr) => (
+                          <option key={yr} value={yr}>
+                            {yr} হিজরি
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        📅 ভর্তির ইংরেজি মাস (ঐচ্ছিক)
+                      </label>
+                      <select
+                        value={admissionEnglishMonth}
+                        onChange={(e) => setAdmissionEnglishMonth(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      >
+                        {ENGLISH_MONTHS.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        ভর্তির তারিখ / ইংরেজি সন
+                      </label>
+                      <input
+                        type="text"
+                        value={admissionDate}
+                        onChange={(e) => setAdmissionDate(e.target.value)}
+                        placeholder="যেমন: ২০২৬-০৫-০১"
+                        className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 <div className="sm:col-span-2">

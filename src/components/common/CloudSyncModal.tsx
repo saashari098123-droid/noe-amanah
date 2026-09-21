@@ -12,6 +12,8 @@ import {
   Layers,
   Sparkles,
   FileSpreadsheet,
+  AlertTriangle,
+  WifiOff,
 } from 'lucide-react';
 import { AdminExcelGoogleDriveModal } from '../admin/AdminExcelGoogleDriveModal';
 
@@ -93,20 +95,52 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
         {/* Body */}
         <div className="p-6 space-y-5">
           {/* Status Indicator Banner */}
-          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between gap-4">
+          <div className={`border rounded-2xl p-4 flex items-center justify-between gap-4 ${
+            cloudSyncStatus === 'error'
+              ? 'bg-rose-50 border-rose-200'
+              : cloudSyncStatus === 'offline'
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-emerald-50 border-emerald-200'
+          }`}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <CheckCircle2 className="w-5 h-5" />
+              <div className={`w-10 h-10 rounded-xl text-white flex items-center justify-center shrink-0 shadow-sm ${
+                cloudSyncStatus === 'error'
+                  ? 'bg-rose-600'
+                  : cloudSyncStatus === 'offline'
+                  ? 'bg-amber-600'
+                  : 'bg-emerald-600'
+              }`}>
+                {cloudSyncStatus === 'error' ? (
+                  <AlertTriangle className="w-5 h-5" />
+                ) : cloudSyncStatus === 'offline' ? (
+                  <WifiOff className="w-5 h-5" />
+                ) : (
+                  <CheckCircle2 className="w-5 h-5" />
+                )}
               </div>
               <div>
-                <h4 className="font-bold text-emerald-900 text-sm">
+                <h4 className={`font-bold text-sm ${
+                  cloudSyncStatus === 'error'
+                    ? 'text-rose-900'
+                    : cloudSyncStatus === 'offline'
+                    ? 'text-amber-900'
+                    : 'text-emerald-900'
+                }`}>
                   {cloudSyncStatus === 'synced'
                     ? 'ডাটাবেস সম্পূর্ণ সিঙ্কড ও সুরক্ষিত'
                     : cloudSyncStatus === 'syncing' || isSyncingLocal
                     ? 'ক্লাউডে তথ্য সিঙ্ক হচ্ছে...'
-                    : 'ক্লাউড সংযোগ সক্রিয়'}
+                    : cloudSyncStatus === 'error'
+                    ? 'ক্লাউড সিঙ্ক ত্রুটি (লোকালে সুরক্ষিত)'
+                    : 'অফলাইন মোড (লোকাল ক্যাশে সংরক্ষিত)'}
                 </h4>
-                <p className="text-xs text-emerald-700 flex items-center gap-1 mt-0.5">
+                <p className={`text-xs flex items-center gap-1 mt-0.5 ${
+                  cloudSyncStatus === 'error'
+                    ? 'text-rose-700'
+                    : cloudSyncStatus === 'offline'
+                    ? 'text-amber-700'
+                    : 'text-emerald-700'
+                }`}>
                   <Clock className="w-3.5 h-3.5" />
                   সর্বশেষ সিঙ্ক: {lastSyncTime}
                 </p>
@@ -116,7 +150,13 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({ isOpen, onClose 
             <button
               onClick={handleManualSync}
               disabled={isSyncingLocal}
-              className="bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+              className={`active:scale-95 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50 ${
+                cloudSyncStatus === 'error'
+                  ? 'bg-rose-700 hover:bg-rose-800'
+                  : cloudSyncStatus === 'offline'
+                  ? 'bg-amber-700 hover:bg-amber-800'
+                  : 'bg-emerald-700 hover:bg-emerald-800'
+              }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncingLocal ? 'animate-spin' : ''}`} />
               <span>{isSyncingLocal ? 'সিঙ্ক হচ্ছে...' : 'এখনই সিঙ্ক করুন'}</span>

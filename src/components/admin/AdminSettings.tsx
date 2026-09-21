@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { MadrasaInfo, PrayerTimeItem } from '../../types';
 import { ImageUploadHelper } from '../common/ImageUploadHelper';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 import {
   Building2,
   Phone,
@@ -83,6 +84,13 @@ export const AdminSettings: React.FC = () => {
   const [confirmPasswordInput, setConfirmPasswordInput] = useState(madrasaInfo.adminPassword || 'admin');
   const [showPassword, setShowPassword] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const handleChange = (field: keyof MadrasaInfo, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -160,15 +168,13 @@ export const AdminSettings: React.FC = () => {
     guardianSmsLogs.length;
 
   const handleResetSystem = () => {
-    if (
-      confirm(
-        'সতর্কবার্তা! আপনি কি সব ডাটা ফ্যাক্টরি ডিফল্ট অবস্থায় ফিরিয়ে নিতে চান? এতে আপনার করা সকল সাম্প্রতিক পরিবর্তন মুছে যাবে।'
-      )
-    ) {
-      resetAllToDefault();
-      alert('সফলভাবে সিস্টেম ডিফল্ট অবস্থায় রিসেট করা হয়েছে।');
-      window.location.reload();
-    }
+    setIsResetModalOpen(true);
+  };
+
+  const handleConfirmReset = () => {
+    resetAllToDefault();
+    showToast('সফলভাবে সিস্টেম ফ্যাক্টরি ডিফল্ট অবস্থায় রিসেট করা হয়েছে!');
+    setIsResetModalOpen(false);
   };
 
   return (
@@ -976,6 +982,26 @@ export const AdminSettings: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* System Factory Reset Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isResetModalOpen}
+        title="সিস্টেম ফ্যাক্টরি রিসেট নিশ্চিতকরণ"
+        itemName="মাদরাসার সকল সাম্প্রতিক ডাটা ও লেনদেন"
+        description="সতর্কবার্তা! আপনি কি নিশ্চিতভাবে সমস্ত ডাটা মুছে প্রাথমিক ডিফল্ট অবস্থায় ফিরে যেতে চান? এতে আপনার তৈরি করা সকল ছাত্র, উস্তাদ, রুটিন, নোটিশ ও আর্থিক লেনদেন মুছে যাবে।"
+        confirmText="হ্যাঁ, ফ্যাক্টরি রিসেট করুন"
+        cancelText="বাতিল"
+        onConfirm={handleConfirmReset}
+        onClose={() => setIsResetModalOpen(false)}
+      />
+
+      {/* Floating Success Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle className="w-4 h-4" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </form>

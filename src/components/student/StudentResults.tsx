@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { ExamResult } from '../../types';
 import { getOrdinalBangla } from '../../utils/meritCalculator';
+import { printHtmlElement } from '../../utils/printHelper';
 import {
   Award,
   Printer,
@@ -23,7 +24,9 @@ export const StudentResults: React.FC = () => {
   const activeResult = myResults.find((r) => r.examType === selectedExamType) || myResults[0];
 
   const handlePrint = () => {
-    window.print();
+    printHtmlElement('student-marksheet-printable', {
+      title: `মার্কশিট - ${currentStudent.nameBangla} (${activeResult?.examName || 'ফলাফল'})`,
+    });
   };
 
   return (
@@ -81,7 +84,7 @@ export const StudentResults: React.FC = () => {
       </div>
 
       {activeResult ? (
-        <div className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-blue-200 space-y-6 animate-in fade-in">
+        <div id="student-marksheet-printable" className="bg-white rounded-3xl p-6 sm:p-10 shadow-lg border border-blue-200 space-y-6 animate-in fade-in">
           {/* Top Result Banner */}
           <div className="text-center border-b-2 border-blue-800 pb-5">
             <div className="font-['Amiri'] text-blue-800 text-base">{madrasaInfo.nameArabic}</div>

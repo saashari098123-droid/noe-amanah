@@ -16,20 +16,35 @@ const firebaseConfig = {
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // Initialize Firestore with specific databaseId and ignoreUndefinedProperties
-const databaseId = (firebaseConfigData as any).firestoreDatabaseId || '(default)';
+const rawDatabaseId = (firebaseConfigData as any).firestoreDatabaseId;
+const databaseId = rawDatabaseId && rawDatabaseId !== '(default)' ? rawDatabaseId : undefined;
 
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(app, {
-    ignoreUndefinedProperties: true,
-  });
+  firestoreInstance = databaseId
+    ? initializeFirestore(app, { ignoreUndefinedProperties: true }, databaseId)
+    : initializeFirestore(app, { ignoreUndefinedProperties: true });
 } catch {
-  firestoreInstance =
-    databaseId && databaseId !== '(default)'
-      ? getFirestore(app, databaseId)
-      : getFirestore(app);
+  firestoreInstance = databaseId
+    ? getFirestore(app, databaseId)
+    : getFirestore(app);
 }
 
 export const db: Firestore = firestoreInstance;
 
 export const auth: Auth = getAuth(app);
+
+// Test Firestore connection on startup as mandated by Firebase integration guidelines
+import { doc, getDocFromServer } from 'firebase/firestore';
+
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Please check your Firebase configuration.');
+    }
+  }
+}
+testConnection();
+

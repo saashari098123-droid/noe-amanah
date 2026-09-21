@@ -24,6 +24,8 @@ import {
   UserCheck,
   FileUp,
   AlertCircle,
+  ChevronDown,
+  Wrench,
   Sparkles,
 } from 'lucide-react';
 import { AutoSyllabusParserModal } from '../common/AutoSyllabusParserModal';
@@ -47,9 +49,12 @@ export const AdminSyllabus: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isAiParserOpen, setIsAiParserOpen] = useState<boolean>(false);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState<boolean>(false);
   const [editingSyllabus, setEditingSyllabus] = useState<SyllabusItem | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [pdfDeleteTarget, setPdfDeleteTarget] = useState<SyllabusItem | null>(null);
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -134,9 +139,19 @@ export const AdminSyllabus: React.FC = () => {
     return teachers[0]?.nameBangla || 'দায়িত্বশীল উস্তাদ';
   };
 
-  // Process PDF File into Base64 Data URL
+  // Process PDF File into Base64 Data URL (with 800KB safety guard)
   const processPdfFile = (file: File): Promise<{ url: string; name: string; size: string }> => {
     return new Promise((resolve, reject) => {
+      const maxBytes = 800 * 1024; // 800 KB
+      if (file.size > maxBytes) {
+        reject(
+          new Error(
+            'ফাইলের সাইজ ৮০০ KB এর বেশি (ফায়ারবেস ডাটাবেজের সর্বোচ্চ সীমা এড়াতে ফাইল সাইজ ৮০০ KB এর কম হতে হবে)। অনুগ্রহ করে ফাইল সাইজ সংকুচিত করুন অথবা সরাসরি গুগল ড্রাইভ/স্টোরেজ লিঙ্ক ইনপুট দিন।'
+          )
+        );
+        return;
+      }
+
       const reader = new FileReader();
       const sizeStr =
         file.size > 1024 * 1024
@@ -150,7 +165,7 @@ export const AdminSyllabus: React.FC = () => {
           size: sizeStr,
         });
       };
-      reader.onerror = () => reject(new Error('ফাইল পড়তে সমস্যা হয়েছে'));
+      reader.onerror = () => reject(new Error('ফাইল পড়তে সমস্যা হয়েছে'));
       reader.readAsDataURL(file);
     });
   };
@@ -171,21 +186,27 @@ export const AdminSyllabus: React.FC = () => {
       });
       alert(`‘${name}’ সফলভাবে সিলেবাসে পিডিএফ হিসেবে যুক্ত ও ক্লাউডে সিঙ্ক করা হয়েছে!`);
       setQuickUploadItem(null);
-    } catch (err) {
-      alert('ফাইল আপলোড করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    } catch (err: any) {
+      alert(err?.message || 'ফাইল আপলোড করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     }
   };
 
   // Remove PDF
   const handleRemovePdf = (item: SyllabusItem) => {
-    if (window.confirm(`আপনি কি এই সিলেবাস থেকে ‘${item.attachmentName || 'সংযুক্ত ফাইল'}’ মুছে ফেলতে চান?`)) {
+    setPdfDeleteTarget(item);
+  };
+
+  const handleConfirmRemovePdf = () => {
+    if (pdfDeleteTarget) {
       updateSyllabus({
-        ...item,
+        ...pdfDeleteTarget,
         attachmentUrl: '',
         attachmentName: '',
         attachmentSize: '',
         updatedAt: new Date().toISOString(),
       });
+      showToast(`‘${pdfDeleteTarget.attachmentName || 'সংযুক্ত ফাইল'}’ সফলভাবে মুছে ফেলা হয়েছে!`);
+      setPdfDeleteTarget(null);
     }
   };
 
@@ -436,68 +457,81 @@ export const AdminSyllabus: React.FC = () => {
       <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="bg-blue-100 text-blue-900 font-bold text-xs px-3 py-1 rounded-full flex items-center gap-1.5">
-                <BookMarked className="w-3.5 h-3.5 text-blue-700" />
-                অভ্যন্তরীণ পাঠ্যসূচি, শিক্ষক নির্ধারণ ও পিডিএফ ফাইল
-              </span>
-              <span className="bg-amber-100 text-amber-900 font-bold text-xs px-2.5 py-1 rounded-full">
-                {syllabuses.length}টি বিষয় তালিকাভুক্ত
-              </span>
-            </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 mt-2">
-              জামাতভিত্তিক সিলেবাস ও পাঠপরিকল্পনা
+            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800">
+              সিলেবাস ও পাঠপরিকল্পনা
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              সকল জামাতের বিষয়ভিত্তিক কিতাব, শিক্ষক নির্ধারণ, পিডিএফ আপলোড, পরীক্ষার মানবন্টন ও পাঠের অগ্রগতি
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => {
-                if (
-                  window.confirm(
-                    'আপনি কি ‘এসো আরবী শিখি’ (৩টি খণ্ড পূর্ণাঙ্গ ২৩৬ দিনের পাঠপরিকল্পনা) সহ সকল আদর্শ সিলেবাস ডাটাবেজে রিস্টোর ও সিঙ্ক করতে চান?'
-                  )
-                ) {
-                  resetSyllabusesToDefault();
-                  alert(
-                    '‘এসো আরবী শিখি’ (১ম, ২য় ও ৩য় খণ্ড) সহ সকল জামাতের পূর্ণাঙ্গ সিলেবাস সফলভাবে ডাটাবেজে লোড ও ক্লাউডে সিঙ্ক করা হয়েছে!'
-                  );
-                }
-              }}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-3.5 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-xs cursor-pointer"
-              title="এসো আরবি শিখি ৩টি খণ্ডের ২৩৬ দিনের পূর্ণাঙ্গ পাঠপরিকল্পনা ও হাদিস-কুরআন পাঠ্যসূচি রিস্টোর করুন"
-            >
-              <RotateCcw className="w-4 h-4 text-emerald-700" />
-              <span>এসো আরবী শিখি সিলেবাস রিস্টোর</span>
-            </button>
-
-            <button
-              onClick={() => setIsAiParserOpen(true)}
-              className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-md hover:shadow-lg cursor-pointer border border-amber-300/60"
-              title="পিডিএফ বা ছবি দিলে এআই স্বয়ংক্রিয়ভাবে বিষয়, অধ্যায় ও পৃষ্ঠা টেবিলে সাজিয়ে দিবে"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-              <span>এআই দিয়ে পিডিএফ সিলেবাস পার্স করুন</span>
-            </button>
-
-            <button
-              onClick={handlePrintFullSyllabus}
-              className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-sm cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-amber-400" />
-              <span>সিলেবাস শিট প্রিন্ট করুন</span>
-            </button>
-
+          <div className="flex items-center gap-2 sm:gap-2.5 relative">
             <button
               onClick={handleOpenAddModal}
-              className="bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-md cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold h-10 px-4 rounded-xl text-xs sm:text-sm inline-flex items-center gap-2 transition shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap"
             >
-              <Plus className="w-4 h-4 text-amber-300" />
+              <Plus className="w-4 h-4" />
               <span>নতুন সিলেবাস যুক্ত করুন</span>
             </button>
+
+            {/* Dropdown Tools Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold h-10 px-3.5 rounded-xl text-xs sm:text-sm inline-flex items-center gap-1.5 transition border border-slate-200 dark:border-slate-700 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>টুলস ও অপশন</span>
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isActionMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isActionMenuOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsActionMenuOpen(false)}
+                  ></div>
+
+                  {/* Dropdown Menu Popover */}
+                  <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-30 space-y-1 text-slate-800 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700/60 mb-1">
+                      সিলেবাস অ্যাকশন মেনু
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setIsActionMenuOpen(false);
+                        setIsAiParserOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 text-xs sm:text-sm hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-800 dark:text-slate-100 hover:text-amber-700 dark:hover:text-amber-300 font-semibold flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>এআই পিডিএফ পার্সার</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsActionMenuOpen(false);
+                        handlePrintFullSyllabus();
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 text-xs sm:text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-semibold flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0" />
+                      <span>সিলেবাস শিট প্রিন্ট করুন</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsActionMenuOpen(false);
+                        setIsRestoreConfirmOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 text-xs sm:text-sm hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-800 dark:text-slate-100 hover:text-emerald-700 dark:hover:text-emerald-300 font-semibold flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <RotateCcw className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>এসো আরবী শিখি সিলেবাস রিস্টোর</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1166,17 +1200,39 @@ export const AdminSyllabus: React.FC = () => {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const { url, name, size } = await processPdfFile(file);
-                            setFormAttachmentUrl(url);
-                            setFormAttachmentName(name);
-                            setFormAttachmentSize(size);
-                            setFormFileBase64(url);
-                            setFormFileMimeType(file.type || 'application/pdf');
+                            try {
+                              const { url, name, size } = await processPdfFile(file);
+                              setFormAttachmentUrl(url);
+                              setFormAttachmentName(name);
+                              setFormAttachmentSize(size);
+                              setFormFileBase64(url);
+                              setFormFileMimeType(file.type || 'application/pdf');
+                            } catch (err: any) {
+                              alert(err?.message || 'ফাইল আপলোড ব্যর্থ হয়েছে');
+                            }
                           }
                         }}
                         className="hidden"
                       />
                     </label>
+
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-500 shrink-0">অথবা ড্রাইভ লিঙ্ক:</span>
+                      <input
+                        type="url"
+                        value={formAttachmentUrl.startsWith('data:') ? '' : formAttachmentUrl}
+                        onChange={(e) => {
+                          const link = e.target.value;
+                          setFormAttachmentUrl(link);
+                          if (link && !formAttachmentName) {
+                            setFormAttachmentName('Google Drive / Cloud File');
+                            setFormAttachmentSize('Cloud Link');
+                          }
+                        }}
+                        placeholder="https://drive.google.com/file/d/..."
+                        className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 font-mono"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1600,6 +1656,34 @@ export const AdminSyllabus: React.FC = () => {
           }
         }}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      {/* Delete PDF Attachment Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(pdfDeleteTarget)}
+        title="সিলেবাস পিডিএফ মুছে ফেলার নিশ্চিতকরণ"
+        itemName={pdfDeleteTarget ? `‘${pdfDeleteTarget.attachmentName || 'সংযুক্ত পিডিএফ'}’ (${pdfDeleteTarget.subjectName})` : undefined}
+        description="আপনি কি এই সিলেবাস থেকে সংযুক্ত পিডিএফ ফাইলটি মুছে ফেলতে চান?"
+        confirmText="হ্যাঁ, পিডিএফ মুছুন"
+        cancelText="বাতিল"
+        onConfirm={handleConfirmRemovePdf}
+        onClose={() => setPdfDeleteTarget(null)}
+      />
+
+      {/* Restore Syllabuses Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={isRestoreConfirmOpen}
+        title="সিলেবাস ডাটাবেজ রিস্টোর নিশ্চিতকরণ"
+        itemName="‘এসো আরবী শিখি’ (১ম, ২য় ও ৩য় খণ্ড) সহ সকল জামাতের আদর্শ সিলেবাস"
+        description="আপনি কি ‘এসো আরবী শিখি’ (৩টি খণ্ড পূর্ণাঙ্গ ২৩৬ দিনের পাঠপরিকল্পনা) সহ সকল আদর্শ সিলেবাস ডাটাবেজে রিস্টোর ও সিঙ্ক করতে চান?"
+        confirmText="হ্যাঁ, রিস্টোর করুন"
+        cancelText="বাতিল"
+        onConfirm={() => {
+          resetSyllabusesToDefault();
+          showToast('‘এসো আরবী শিখি’ সহ সকল জামাতের পূর্ণাঙ্গ সিলেবাস সফলভাবে রিস্টোর করা হয়েছে!');
+          setIsRestoreConfirmOpen(false);
+        }}
+        onClose={() => setIsRestoreConfirmOpen(false)}
       />
 
       {/* Floating Success Toast */}

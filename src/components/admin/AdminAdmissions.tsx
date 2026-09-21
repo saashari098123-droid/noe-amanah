@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { OnlineAdmissionApplication } from '../../types';
+import { printHtmlElement } from '../../utils/printHelper';
 import {
   FileCheck,
   Search,
@@ -16,13 +17,16 @@ import {
   DollarSign,
   ShieldCheck,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const AdminAdmissions: React.FC = () => {
   const {
     admissionApplications,
     updateAdmissionStatus,
     approveAdmissionApplication,
+    deleteAdmissionApplication,
     madrasaInfo,
     classes,
     students,
@@ -31,6 +35,7 @@ export const AdminAdmissions: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedApplication, setSelectedApplication] = useState<OnlineAdmissionApplication | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<OnlineAdmissionApplication | null>(null);
 
   // Approval Enrollment Modal State
   const [approvingApp, setApprovingApp] = useState<OnlineAdmissionApplication | null>(null);
@@ -97,7 +102,7 @@ export const AdminAdmissions: React.FC = () => {
   };
 
   const handlePrint = () => {
-    window.print();
+    printHtmlElement('admin-admissions-print-slip', { title: 'ভর্তি আবেদনপত্র ও প্রবেশপত্র - দারুল আমানাহ' });
   };
 
   return (
@@ -115,11 +120,8 @@ export const AdminAdmissions: React.FC = () => {
           <div>
             <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               <FileCheck className="w-5 h-5 text-purple-600" />
-              অনলাইন ভর্তি আবেদন পর্যালোচনা ও চূড়ান্ত অনুমোদন
+              অনলাইন ভর্তি আবেদন
             </h2>
-            <p className="text-xs text-slate-500">
-              আবেদনসমূহ যাচাই করে আবাসন ধরন ও নির্ধারিত বেতন অনুযায়ী ছাত্র আইডি এবং রোল বরাদ্দ দিয়ে চূড়ান্ত ভর্তি সম্পন্ন করুন
-            </p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -326,6 +328,14 @@ export const AdminAdmissions: React.FC = () => {
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
+
+                          <button
+                            onClick={() => setDeleteTarget(app)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="আবেদন মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -467,7 +477,7 @@ export const AdminAdmissions: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs text-slate-800">
+            <div id="admin-admissions-print-slip" className="p-6 space-y-4 text-xs text-slate-800 bg-white">
               <div className="text-center border-b border-slate-200 pb-3">
                 <div className="font-['Amiri'] text-blue-800 text-sm">{madrasaInfo.nameArabic}</div>
                 <h3 className="font-bold text-base text-slate-900">{madrasaInfo.nameBangla}</h3>
@@ -562,6 +572,32 @@ export const AdminAdmissions: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Delete Admission Application Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteTarget)}
+        title="ভর্তি আবেদন মুছে ফেলার নিশ্চিতকরণ"
+        itemName={deleteTarget ? `${deleteTarget.applicantNameBangla} (আবেদন নং: ${deleteTarget.applicationNumber})` : undefined}
+        description="আপনি কি নিশ্চিতভাবে এই ভর্তি আবেদনটি তালিকা থেকে মুছে ফেলতে চান?"
+        confirmText="হ্যাঁ, আবেদন মুছুন"
+        cancelText="বাতিল"
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteAdmissionApplication(deleteTarget.id);
+            showToast(`${deleteTarget.applicantNameBangla} এর আবেদনটি সফলভাবে মুছে ফেলা হয়েছে!`);
+            setDeleteTarget(null);
+          }
+        }}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      {/* Floating Success Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toastMessage}</span>
         </div>
       )}
     </div>

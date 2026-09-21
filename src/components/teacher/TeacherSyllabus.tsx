@@ -27,6 +27,8 @@ import {
   AlertCircle,
   FileUp,
   RotateCcw,
+  ChevronDown,
+  Wrench,
 } from 'lucide-react';
 
 import { AutoSyllabusParserModal } from '../common/AutoSyllabusParserModal';
@@ -49,6 +51,7 @@ export const TeacherSyllabus: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isAiParserOpen, setIsAiParserOpen] = useState<boolean>(false);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState<boolean>(false);
 
   // PDF Viewer Modal State
   const [viewingPdfItem, setViewingPdfItem] = useState<SyllabusItem | null>(null);
@@ -168,9 +171,19 @@ export const TeacherSyllabus: React.FC = () => {
 
   const overallProgress = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
 
-  // Handle PDF File Conversion to Base64 Data URL
+  // Handle PDF File Conversion to Base64 Data URL (with 800KB safety guard)
   const processPdfFile = (file: File): Promise<{ url: string; name: string; size: string }> => {
     return new Promise((resolve, reject) => {
+      const maxBytes = 800 * 1024; // 800 KB
+      if (file.size > maxBytes) {
+        reject(
+          new Error(
+            'ফাইলের সাইজ ৮০০ KB এর বেশি (ফায়ারবেস ক্লাউডের জন্য সর্বোচ্চ ৮০০ KB অনুমোদিত)। অনুগ্রহ করে ফাইল সাইজ সংকুচিত করুন অথবা গুগল ড্রাইভ / ক্লাউড স্টোরেজ লিংক ব্যবহার করুন।'
+          )
+        );
+        return;
+      }
+
       const reader = new FileReader();
       const sizeStr =
         file.size > 1024 * 1024
@@ -184,7 +197,7 @@ export const TeacherSyllabus: React.FC = () => {
           size: sizeStr,
         });
       };
-      reader.onerror = () => reject(new Error('ফাইল পড়তে সমস্যা হয়েছে'));
+      reader.onerror = () => reject(new Error('ফাইল পড়তে সমস্যা হয়েছে'));
       reader.readAsDataURL(file);
     });
   };
@@ -205,8 +218,8 @@ export const TeacherSyllabus: React.FC = () => {
       });
       alert(`‘${name}’ সফলভাবে এই সিলেবাসে পিডিএফ হিসেবে যুক্ত ও সংরক্ষণ করা হয়েছে!`);
       setQuickUploadItem(null);
-    } catch (err) {
-      alert('ফাইল আপলোড করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    } catch (err: any) {
+      alert(err?.message || 'ফাইল আপলোড করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     }
   };
 
@@ -419,49 +432,70 @@ export const TeacherSyllabus: React.FC = () => {
       <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="bg-blue-100 text-blue-900 font-bold text-xs px-3 py-1 rounded-full flex items-center gap-1.5">
-                <BookMarked className="w-3.5 h-3.5 text-blue-700" />
-                পাঠ্যক্রম, পাঠপরিকল্পনা ও পিডিএফ ব্যবস্থাপনা
-              </span>
-              <span className="bg-emerald-100 text-emerald-900 font-bold text-xs px-2.5 py-1 rounded-full flex items-center gap-1">
-                <UserCheck className="w-3 h-3 text-emerald-700" />
-                শিক্ষক: {currentTeacher?.nameBangla || teachers[0]?.nameBangla || 'মুহতারাম উস্তাদ'}
-              </span>
-            </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 mt-2">
-              ক্লাসভিত্তিক সিলেবাস ও শিক্ষক পাঠপরিকল্পনা
+            <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800">
+              সিলেবাস ও শিক্ষক পাঠপরিকল্পনা
             </h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              সরাসরি পিডিএফ ফাইল যোগ করুন, অধ্যায়গুলোর প্রগ্রেস টিক দিন এবং পাঠপরিকল্পনা পরিচালনা করুন
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => setIsAiParserOpen(true)}
-              className="bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-slate-950 font-extrabold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-md hover:shadow-lg cursor-pointer border border-amber-300/60"
-              title="পিডিএফ বা ছবি দিলে এআই স্বয়ংক্রিয়ভাবে বিষয়, অধ্যায় ও পৃষ্ঠা সাজিয়ে দিবে"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-              <span>এআই পিডিএফ সিলেবাস পার্সার</span>
-            </button>
-
+          <div className="flex items-center gap-2 sm:gap-2.5 relative">
             <button
               onClick={handleOpenAddModal}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-xs cursor-pointer"
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold h-10 px-4 rounded-xl text-xs sm:text-sm inline-flex items-center gap-2 transition shadow-xs hover:shadow-md cursor-pointer whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
               <span>নতুন সিলেবাস যোগ করুন</span>
             </button>
 
-            <button
-              onClick={handlePrint}
-              className="bg-slate-800 hover:bg-slate-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs sm:text-sm flex items-center gap-2 transition shadow-xs cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-amber-300" />
-              <span>প্রিন্ট শিট</span>
-            </button>
+            {/* Dropdown Tools Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold h-10 px-3.5 rounded-xl text-xs sm:text-sm inline-flex items-center gap-1.5 transition border border-slate-200 dark:border-slate-700 cursor-pointer shadow-xs active:scale-95"
+              >
+                <Wrench className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>টুলস ও অপশন</span>
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isActionMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isActionMenuOpen && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsActionMenuOpen(false)}
+                  ></div>
+
+                  {/* Dropdown Menu Popover */}
+                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 py-2 z-30 space-y-1 text-slate-800 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700/60 mb-1">
+                      সিলেবাস অ্যাকশন মেনু
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setIsActionMenuOpen(false);
+                        setIsAiParserOpen(true);
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 text-xs sm:text-sm hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-800 dark:text-slate-100 hover:text-amber-700 dark:hover:text-amber-300 font-semibold flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span>এআই পিডিএফ পার্সার</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsActionMenuOpen(false);
+                        handlePrint();
+                      }}
+                      className="w-full text-left px-3.5 py-2.5 text-xs sm:text-sm hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-100 font-semibold flex items-center gap-2.5 transition cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 text-slate-600 dark:text-slate-300 shrink-0" />
+                      <span>প্রিন্ট শিট</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -977,15 +1011,37 @@ export const TeacherSyllabus: React.FC = () => {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const { url, name, size } = await processPdfFile(file);
-                            setFormAttachmentUrl(url);
-                            setFormAttachmentName(name);
-                            setFormAttachmentSize(size);
+                            try {
+                              const { url, name, size } = await processPdfFile(file);
+                              setFormAttachmentUrl(url);
+                              setFormAttachmentName(name);
+                              setFormAttachmentSize(size);
+                            } catch (err: any) {
+                              alert(err?.message || 'ফাইল আপলোড ব্যর্থ হয়েছে');
+                            }
                           }
                         }}
                         className="hidden"
                       />
                     </label>
+
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-500 shrink-0">অথবা ড্রাইভ লিঙ্ক:</span>
+                      <input
+                        type="url"
+                        value={formAttachmentUrl.startsWith('data:') ? '' : formAttachmentUrl}
+                        onChange={(e) => {
+                          const link = e.target.value;
+                          setFormAttachmentUrl(link);
+                          if (link && !formAttachmentName) {
+                            setFormAttachmentName('Google Drive / Cloud File');
+                            setFormAttachmentSize('Cloud Link');
+                          }
+                        }}
+                        placeholder="https://drive.google.com/file/d/..."
+                        className="flex-1 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 placeholder:text-slate-400 font-mono"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

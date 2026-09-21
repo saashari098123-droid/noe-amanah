@@ -12,6 +12,17 @@
         "email": { "type": "string" }
       }
     },
+    "institutions": {
+      "title": "Institutions",
+      "description": "Branch institutions or campuses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
     "students": {
       "title": "Students",
       "description": "Enrolled student records with academic and financial details",
@@ -65,6 +76,18 @@
         "status": { "type": "string" }
       }
     },
+    "homework": {
+      "title": "Homework",
+      "description": "Daily subject homework and assignments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "dueDate": { "type": "string" }
+      }
+    },
     "fee_payments": {
       "title": "Fee Payments",
       "description": "Tuition, admission and examination fee vouchers",
@@ -76,6 +99,19 @@
         "amount": { "type": "number" },
         "paymentMethod": { "type": "string" },
         "status": { "type": "string" }
+      }
+    },
+    "financial_transactions": {
+      "title": "Financial Transactions",
+      "description": "Income, expense, teacher salary and voucher accounts ledger",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "voucherNumber": { "type": "string" },
+        "type": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" }
       }
     },
     "exam_results": {
@@ -121,6 +157,61 @@
         "title": { "type": "string" },
         "type": { "type": "string" },
         "url": { "type": "string" }
+      }
+    },
+    "complaints": {
+      "title": "Complaints",
+      "description": "Guardian feedback, suggestions and complaints",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "routines": {
+      "title": "Routines",
+      "description": "Class routines and weekly class timetables",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "periodName": { "type": "string" }
+      }
+    },
+    "guardian_sms_logs": {
+      "title": "Guardian SMS Logs",
+      "description": "Auto SMS logs sent to student guardians",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "recipientPhone": { "type": "string" },
+        "messageContent": { "type": "string" }
+      }
+    },
+    "prayer_times": {
+      "title": "Prayer Times",
+      "description": "Daily prayer and azan/iqamah schedules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "azanTime": { "type": "string" },
+        "iqamahTime": { "type": "string" }
+      }
+    },
+    "syllabuses": {
+      "title": "Syllabuses",
+      "description": "Academic syllabus and exam curricula",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "classId": { "type": "string" },
+        "subjectName": { "type": "string" },
+        "term": { "type": "string" }
       }
     }
   }

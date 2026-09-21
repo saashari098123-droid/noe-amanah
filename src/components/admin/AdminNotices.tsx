@@ -60,19 +60,16 @@ export const AdminNotices: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <Bell className="w-5 h-5 text-blue-600" />
-            অফিসিয়াল নোটিশ ও বিজ্ঞপ্তি প্রকাশনা ডেস্ক
+            অফিসিয়াল নোটিশ বোর্ড
           </h2>
-          <p className="text-xs text-slate-500">
-            প্রতিষ্ঠানের ছুটি, পরীক্ষা, বার্ষিক মাহফিল ও প্রশাসনিক নোটিশ ম্যানেজ করুন
-          </p>
         </div>
 
         <button
           onClick={() => setIsAddModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center gap-2"
+          className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold h-10 px-4 rounded-xl text-xs sm:text-sm inline-flex items-center gap-2 transition shadow-xs hover:shadow-md cursor-pointer shrink-0"
         >
           <Plus className="w-4 h-4" />
-          নতুন নোটিশ জারি করুন
+          <span>নতুন নোটিশ জারি করুন</span>
         </button>
       </div>
 

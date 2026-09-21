@@ -3,6 +3,7 @@ import { useMadrasa } from '../../context/MadrasaContext';
 import { Teacher } from '../../types';
 import { ImageUploadHelper } from '../common/ImageUploadHelper';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
+import { UserAvatar } from '../common/UserAvatar';
 import {
   GraduationCap,
   Plus,
@@ -26,6 +27,8 @@ import {
   UserPlus,
   Cloud,
   RefreshCw,
+  MoreVertical,
+  Banknote,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -39,6 +42,7 @@ export const AdminTeachers: React.FC = () => {
     syncAllToCloud,
     cloudSyncStatus,
     lastSyncTime,
+    setActiveAdminTab,
   } = useMadrasa();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,6 +52,7 @@ export const AdminTeachers: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [isTeacherMoreOpen, setIsTeacherMoreOpen] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -63,11 +68,10 @@ export const AdminTeachers: React.FC = () => {
   const [designation, setDesignation] = useState('মুহাদ্দিস ও সিনিয়র উস্তাদ');
   const [qualification, setQualification] = useState('দাওরায়ে হাদিস (মুমতাজ)');
   const [phone, setPhone] = useState('');
+  const [salary, setSalary] = useState<number>(18000);
   const [assignedClasses, setAssignedClasses] = useState<string[]>([classes[0]?.id || 'cls-madani-1']);
   const [assignedSubjectsStr, setAssignedSubjectsStr] = useState('এসো আরবি শিখি, আদাবুল মুআশারাত');
-  const [photoUrl, setPhotoUrl] = useState(
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
-  );
+  const [photoUrl, setPhotoUrl] = useState('');
 
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
@@ -81,17 +85,26 @@ export const AdminTeachers: React.FC = () => {
 
   const openAddModal = () => {
     setEditingTeacherId(null);
-    setId(`tch-${String(teachers.length + 1).padStart(2, '0')}`);
+    let suggestedId = '';
+    let attempt = 0;
+    do {
+      suggestedId = `tch-${String(teachers.length + 1 + attempt).padStart(2, '0')}`;
+      attempt++;
+    } while (teachers.some((t) => t.id === suggestedId) && attempt < 100);
+
+    const randomPass = Math.floor(100000 + Math.random() * 900000).toString();
+    setId(suggestedId);
     setNameBangla('');
     setNameEnglish('');
     setEmail(`teacher${teachers.length + 1}@darulamanah.edu.bd`);
-    setPassword('madrasa123');
+    setPassword(randomPass);
     setDesignation('সহকারী উস্তাদ');
     setQualification('দাওরায়ে হাদিস, বেফাকুল মাদারিস');
     setPhone('');
+    setSalary(18000);
     setAssignedClasses([classes[0]?.id || 'cls-madani-1']);
     setAssignedSubjectsStr('এসো আরবি শিখি, তামরীন');
-    setPhotoUrl('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80');
+    setPhotoUrl('');
     setIsModalOpen(true);
   };
 
@@ -105,6 +118,7 @@ export const AdminTeachers: React.FC = () => {
     setDesignation(t.designation);
     setQualification(t.qualification);
     setPhone(t.phone);
+    setSalary(t.salary || 18000);
     setAssignedClasses(t.assignedClasses || []);
     setAssignedSubjectsStr(t.assignedSubjects?.join(', ') || '');
     setPhotoUrl(t.photoUrl || '');
@@ -120,20 +134,31 @@ export const AdminTeachers: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const targetId = id.trim();
+    if (!editingTeacherId) {
+      const existingTeacher = teachers.find((t) => t.id.toLowerCase() === targetId.toLowerCase());
+      if (existingTeacher) {
+        alert('এই আইডি already আছে! অনুগ্রহ করে ভিন্ন আইডি দিন।');
+        return;
+      }
+    }
+
     const subjects = assignedSubjectsStr
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
 
+    const randomPass = Math.floor(100000 + Math.random() * 900000).toString();
     const teacherData: Teacher = {
-      id,
+      id: targetId,
       nameBangla: nameBangla.trim(),
       nameEnglish: nameEnglish.trim() || undefined,
       email: email.trim().toLowerCase(),
-      password: password.trim() || 'madrasa123',
+      password: password.trim() || randomPass,
       designation: designation.trim(),
       qualification: qualification.trim(),
       phone: phone.trim(),
+      salary: Number(salary) || 18000,
       assignedClasses: assignedClasses.length > 0 ? assignedClasses : [classes[0]?.id || 'cls-madani-1'],
       assignedSubjects: subjects.length > 0 ? subjects : ['সাধারণ ইসলামিক শিক্ষা'],
       joiningDate: new Date().toLocaleDateString('bn-BD'),
@@ -178,34 +203,63 @@ export const AdminTeachers: React.FC = () => {
       {/* Header & Stats */}
       <div className="bg-white rounded-3xl p-6 shadow-xs border border-slate-200 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-blue-700 font-bold text-xs">
-            <Shield className="w-4 h-4" />
-            <span>শিক্ষক ও উস্তাদ নিয়ন্ত্রণ কেন্দ্র</span>
-          </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 mt-1">উস্তাদ ও শিক্ষক তালিকা এবং লগইন ব্যবস্থাপনা</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            নতুন উস্তাদের নাম যোগ করুন। শিক্ষকগণ তাদের নাম এবং মোবাইল নম্বর দিয়েই মোবাইল বা ল্যাপটপ থেকে সহজে লগইন করতে পারবেন।
-          </p>
+          <h2 className="text-xl font-bold text-slate-900">উস্তাদ ও শিক্ষক তালিকা</h2>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
-            onClick={handleSyncNow}
-            disabled={isSyncingNow}
-            className="flex-1 sm:flex-none bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-4 py-3 rounded-2xl text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
-            title="সব শিক্ষকের তথ্য ফায়ারবেস ক্লাউড ডাটাবেসে জোরপূর্বক সিঙ্ক করুন"
+            onClick={() => setActiveAdminTab('teacher_salaries')}
+            className="bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-bold h-10 px-4 rounded-xl text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition shadow-xs hover:shadow-md cursor-pointer shrink-0"
           >
-            <RefreshCw className={`w-4 h-4 text-emerald-600 ${isSyncingNow ? 'animate-spin' : ''}`} />
-            <span>{isSyncingNow ? 'ক্লাউডে সিঙ্ক হচ্ছে...' : 'ফায়ারবেস সিঙ্ক'}</span>
+            <Banknote className="w-4 h-4 text-slate-950" />
+            <span>উস্তাদদের হাদিয়া ও বেতন</span>
           </button>
 
           <button
             onClick={openAddModal}
-            className="flex-1 sm:flex-none bg-blue-700 hover:bg-blue-800 text-white font-bold px-5 py-3 rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-98"
+            className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold h-10 px-4 rounded-xl text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition shadow-xs hover:shadow-md cursor-pointer shrink-0"
           >
-            <UserPlus className="w-4 h-4 text-amber-300" />
-            <span>নতুন উস্তাদের নাম যোগ করুন</span>
+            <UserPlus className="w-4 h-4 text-emerald-100" />
+            <span>নতুন উস্তাদ যোগ করুন</span>
           </button>
+
+          {/* Three-Dot Menu for Teachers Options */}
+          <div className="relative">
+            <button
+              id="teachers-more-options-btn"
+              onClick={() => setIsTeacherMoreOpen((prev) => !prev)}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-3 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+              title="অতিরিক্ত অপশন ও সিঙ্ক"
+            >
+              <MoreVertical className="w-4 h-4 text-slate-700" />
+              <span className="hidden sm:inline">অপশন</span>
+            </button>
+
+            {isTeacherMoreOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsTeacherMoreOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-64 bg-white text-slate-800 border border-slate-200 rounded-2xl shadow-2xl p-2 z-50 space-y-1.5 text-xs animate-in fade-in zoom-in-95">
+                  <button
+                    onClick={() => {
+                      setIsTeacherMoreOpen(false);
+                      handleSyncNow();
+                    }}
+                    disabled={isSyncingNow}
+                    className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-emerald-50 text-emerald-900 transition text-left cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 text-emerald-600 shrink-0 ${isSyncingNow ? 'animate-spin' : ''}`} />
+                    <div>
+                      <div className="font-bold">ফায়ারবেস ক্লাউড সিঙ্ক</div>
+                      <div className="text-[11px] text-slate-500">সব শিক্ষকের তথ্য ক্লাউডে সিঙ্ক করুন</div>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -283,10 +337,11 @@ export const AdminTeachers: React.FC = () => {
                       <tr key={t.id} className="hover:bg-slate-50 transition">
                         <td className="p-3">
                           <div className="flex items-center gap-3">
-                            <img
-                              src={t.photoUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'}
+                            <UserAvatar
+                              src={t.photoUrl}
                               alt={t.nameBangla}
-                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0 bg-slate-100"
+                              type="teacher"
+                              className="w-11 h-11 rounded-xl object-cover border border-slate-200 shrink-0"
                             />
                             <div>
                               <div className="font-bold text-slate-900 text-sm">{t.nameBangla}</div>
@@ -395,10 +450,11 @@ export const AdminTeachers: React.FC = () => {
                   {/* Header with Photo and Actions */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={t.photoUrl || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'}
+                      <UserAvatar
+                        src={t.photoUrl}
                         alt={t.nameBangla}
-                        className="w-13 h-13 rounded-2xl object-cover border-2 border-blue-100 shadow-xs shrink-0 bg-slate-100"
+                        type="teacher"
+                        className="w-13 h-13 rounded-2xl object-cover border-2 border-blue-100 shadow-xs shrink-0"
                       />
                       <div>
                         <h3 className="font-bold text-slate-900 text-sm">{t.nameBangla}</h3>
@@ -611,16 +667,30 @@ export const AdminTeachers: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">শিক্ষাগত যোগ্যতা *</label>
-                <input
-                  type="text"
-                  required
-                  value={qualification}
-                  onChange={(e) => setQualification(e.target.value)}
-                  placeholder="দাওরায়ে হাদিস (মুমতাজ), জামিয়া রাহমানিয়া"
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">শিক্ষাগত যোগ্যতা *</label>
+                  <input
+                    type="text"
+                    required
+                    value={qualification}
+                    onChange={(e) => setQualification(e.target.value)}
+                    placeholder="দাওরায়ে হাদিস (মুমতাজ), জামিয়া রাহমানিয়া"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">মাসিক নির্ধারিত হাদিয়া/বেতন (৳) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    value={salary}
+                    onChange={(e) => setSalary(Number(e.target.value))}
+                    placeholder="18000"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl font-mono font-bold text-blue-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500 text-xs sm:text-sm"
+                  />
+                </div>
               </div>
 
               <div>

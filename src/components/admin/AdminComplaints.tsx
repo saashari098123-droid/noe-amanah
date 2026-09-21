@@ -9,19 +9,31 @@ import {
   Calendar,
   User,
   ShieldCheck,
+  Trash2,
 } from 'lucide-react';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const AdminComplaints: React.FC = () => {
-  const { complaints, replyComplaint } = useMadrasa();
+  const { complaints, replyComplaint, deleteComplaint } = useMadrasa();
 
   const [activeReplyingId, setActiveReplyingId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; subject: string; senderName: string } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
 
   const handleSendReply = (complaintId: string) => {
     if (!replyText.trim()) return;
-    replyComplaint(complaintId, replyText.trim(), 'মুহতামিম ও প্রধান প্রশাসন');
+    if (replyComplaint) {
+      replyComplaint(complaintId, replyText.trim(), 'মুহতামিম ও প্রধান প্রশাসন');
+    }
     setActiveReplyingId(null);
     setReplyText('');
+    showToast('উত্তর সফলভাবে সংরক্ষিত ও প্রেরিত হয়েছে!');
   };
 
   return (
@@ -82,6 +94,19 @@ export const AdminComplaints: React.FC = () => {
                         অপেক্ষমাণ
                       </span>
                     )}
+                    <button
+                      onClick={() =>
+                        setDeleteTarget({
+                          id: item.id,
+                          subject: item.subject,
+                          senderName: item.senderName,
+                        })
+                      }
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                      title="বার্তা মুছে ফেলুন"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -154,6 +179,31 @@ export const AdminComplaints: React.FC = () => {
           })
         )}
       </div>
+      {/* Delete Complaint Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={Boolean(deleteTarget)}
+        title="অভিযোগ / পরামর্শ মুছে ফেলার নিশ্চিতকরণ"
+        itemName={deleteTarget ? `${deleteTarget.senderName}: "${deleteTarget.subject}"` : undefined}
+        description="আপনি কি নিশ্চিতভাবে এই অভিযোগ/বার্তাটি মুছে ফেলতে চান?"
+        confirmText="হ্যাঁ, মুছে ফেলুন"
+        cancelText="বাতিল"
+        onConfirm={() => {
+          if (deleteTarget) {
+            deleteComplaint(deleteTarget.id);
+            showToast('বার্তা সফলভাবে মুছে ফেলা হয়েছে!');
+            setDeleteTarget(null);
+          }
+        }}
+        onClose={() => setDeleteTarget(null)}
+      />
+
+      {/* Floating Success Toast */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-700 text-white px-5 py-3 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-bold animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
     </div>
   );
 };

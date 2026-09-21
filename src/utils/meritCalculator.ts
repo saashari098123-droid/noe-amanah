@@ -76,12 +76,27 @@ export const calculateMeritPositions = (
   const rankedResults: ExamResult[] = [];
 
   Object.values(grouped).forEach((group) => {
+    // Ensure isPassedAll and overall grades are strictly validated against subject failures
+    const validatedGroup = group.map((item) => {
+      const hasSubjectFail = Array.isArray(item.subjects) && item.subjects.length > 0 && item.subjects.some((s) => {
+        const pass = s.passMarks !== undefined ? s.passMarks : 40;
+        return (s.obtainedMarks || 0) < pass || s.grade === 'F' || s.isPassed === false;
+      });
+      const isPassedAll = !hasSubjectFail && (item.percentage >= 40);
+      return {
+        ...item,
+        isPassedAll,
+        overallGrade: !isPassedAll ? 'F' : item.overallGrade,
+        overallArabicGrade: !isPassedAll ? 'রাসিব (অকৃতকার্য)' : item.overallArabicGrade,
+      };
+    });
+
     // Sort in place within this class and exam:
     // Highest marks first. If passedAll is defined, passed students rank ahead.
-    const sorted = [...group].sort((a, b) => {
-      // 1. Pass status precedence (passed students precede failed students)
-      const aPassed = a.isPassedAll !== false && a.percentage >= 33;
-      const bPassed = b.isPassedAll !== false && b.percentage >= 33;
+    const sorted = [...validatedGroup].sort((a, b) => {
+      // 1. Pass status precedence (passed students precede failed students - pass mark is 40%)
+      const aPassed = a.isPassedAll !== false && a.percentage >= 40;
+      const bPassed = b.isPassedAll !== false && b.percentage >= 40;
       if (aPassed && !bPassed) return -1;
       if (!aPassed && bPassed) return 1;
 

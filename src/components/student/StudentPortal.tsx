@@ -7,6 +7,7 @@ import { StudentFees } from './StudentFees';
 import { StudentResults } from './StudentResults';
 import { StudentFeedback } from './StudentFeedback';
 import { StudentSyllabus } from './StudentSyllabus';
+import { UserAvatar } from '../common/UserAvatar';
 import {
   GraduationCap,
   Users,
@@ -20,10 +21,14 @@ import {
   Sparkles,
   Phone,
   BookMarked,
+  MoreVertical,
+  User,
+  HelpCircle,
 } from 'lucide-react';
 
 export const StudentPortal: React.FC = () => {
   const { currentStudent, activeStudentTab, setActiveStudentTab, logout } = useMadrasa();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   if (!currentStudent) {
     return (
@@ -56,9 +61,10 @@ export const StudentPortal: React.FC = () => {
       {/* Student Identity Profile Header */}
       <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-teal-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-blue-700/50 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-          <img
+          <UserAvatar
             src={currentStudent.photoUrl}
             alt={currentStudent.nameBangla}
+            type="student"
             className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-4 border-amber-400 shadow-lg shrink-0"
           />
           <div className="space-y-1">
@@ -86,10 +92,10 @@ export const StudentPortal: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="bg-blue-950/60 border border-blue-700/60 p-3 rounded-2xl text-center text-xs">
-            <div className="text-blue-300">আবাসিক স্ট্যাটাস</div>
-            <div className="text-sm font-bold text-amber-300">
+        <div className="flex flex-row items-center gap-2.5">
+          <div className="bg-blue-950/60 border border-blue-700/60 px-3.5 py-2.5 rounded-2xl text-center text-xs">
+            <div className="text-[10px] text-blue-300">আবাসিক স্ট্যাটাস</div>
+            <div className="text-xs font-bold text-amber-300">
               {currentStudent.residentialStatus === 'residential'
                 ? 'আবাসিক হোস্টেল'
                 : currentStudent.residentialStatus === 'non-residential'
@@ -97,13 +103,63 @@ export const StudentPortal: React.FC = () => {
                 : 'ডে-কেয়ার'}
             </div>
           </div>
-          <button
-            onClick={logout}
-            className="bg-rose-900/50 hover:bg-rose-900 text-rose-200 border border-rose-700/50 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition"
-          >
-            <LogOut className="w-4 h-4" />
-            লগআউট
-          </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2.5 bg-blue-950/60 hover:bg-blue-950 text-blue-100 border border-blue-700/60 rounded-2xl transition flex items-center justify-center"
+              title="মেনু অপশন"
+            >
+              <MoreVertical className="w-5 h-5 text-white" />
+            </button>
+
+            {isMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setIsMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 py-2 z-40 space-y-1 text-xs">
+                  <div className="px-3.5 py-1.5 border-b border-slate-100">
+                    <p className="font-bold text-slate-800 truncate">{currentStudent.nameBangla}</p>
+                    <p className="text-[10px] text-slate-500 font-mono">ID: {currentStudent.id}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setActiveStudentTab('overview');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-slate-700 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 transition"
+                  >
+                    <User className="w-4 h-4 text-blue-600" />
+                    প্রোফাইল বিবরণ
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      setActiveStudentTab('feedback');
+                    }}
+                    className="w-full px-3.5 py-2 text-left text-slate-700 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 transition"
+                  >
+                    <HelpCircle className="w-4 h-4 text-amber-600" />
+                    অভিযোগ ও পরামর্শ
+                  </button>
+                  <div className="pt-1 border-t border-slate-100">
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        logout();
+                      }}
+                      className="w-full px-3.5 py-2 text-left text-rose-600 hover:bg-rose-50 font-semibold flex items-center gap-2 transition"
+                    >
+                      <LogOut className="w-4 h-4 text-rose-600" />
+                      লগআউট করুন
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

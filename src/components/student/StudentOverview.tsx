@@ -22,8 +22,70 @@ export const StudentOverview: React.FC = () => {
   // Filter student specific homework
   const todayHomeworks = homework.filter((h) => h.classId === currentStudent.classId);
 
-  // Student attendance status for today
-  const todayAtt = attendance.find((a) => a.studentId === currentStudent.id);
+  // Student attendance status for today & latest records
+  const normCurrentStudentId = currentStudent.id.trim().toLowerCase();
+
+  const todayDateStr = (() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  })();
+
+  const studentRecords = attendance
+    .filter((a) => a.studentId?.trim().toLowerCase() === normCurrentStudentId)
+    .sort((a, b) => {
+      const dateCmp = (b.date || '').localeCompare(a.date || '');
+      if (dateCmp !== 0) return dateCmp;
+      return Number(b.periodNumber || 1) - Number(a.periodNumber || 1);
+    });
+
+  const todayRecords = studentRecords.filter((a) => a.date === todayDateStr);
+  const hasTodayAttendance = todayRecords.length > 0;
+
+  let todayStatus: 'present' | 'absent' | 'leave' | 'late' | 'pending' = 'pending';
+  let todayStatusText = 'হাজিরা অপেক্ষমাণ';
+  let todayDetailText = 'আজকের হাজিরা এখনও সম্পন্ন হয়নি';
+
+  if (hasTodayAttendance) {
+    const isAnyAbsent = todayRecords.some((r) => r.status === 'absent');
+    const isAnyLeave = todayRecords.some((r) => r.status === 'leave');
+    const isAnyLate = todayRecords.some((r) => r.status === 'late');
+
+    if (isAnyAbsent) {
+      todayStatus = 'absent';
+      todayStatusText = 'অনুপস্থিত (Absent)';
+      const absentPeriods = todayRecords
+        .filter((r) => r.status === 'absent')
+        .map((r) => r.periodName || `${r.periodNumber}ম ঘণ্টা`)
+        .join(', ');
+      todayDetailText = `অনুপস্থিত: ${absentPeriods}`;
+    } else if (isAnyLate) {
+      todayStatus = 'late';
+      todayStatusText = 'বিলম্ব (Late)';
+      todayDetailText = 'আজ দেরিতে ক্লাসে উপস্থিত হয়েছে';
+    } else if (isAnyLeave) {
+      todayStatus = 'leave';
+      todayStatusText = 'ছুটি মঞ্জুর (Leave)';
+      todayDetailText = 'কর্তৃপক্ষ কর্তৃক ছুটি অনুমোদিত';
+    } else {
+      todayStatus = 'present';
+      todayStatusText = 'উপস্থিত (Present)';
+      todayDetailText = `আজকের সব পিরিয়ডে উপস্থিত (${todayRecords.length}টি ঘণ্টা)`;
+    }
+  } else if (studentRecords.length > 0) {
+    const latest = studentRecords[0];
+    todayDetailText = `সর্বশেষ: ${
+      latest.status === 'present'
+        ? 'উপস্থিত'
+        : latest.status === 'absent'
+        ? 'অনুপস্থিত'
+        : latest.status === 'leave'
+        ? 'ছুটি'
+        : 'বিলম্ব'
+    } (${latest.date})`;
+  }
 
   // Fee summary & dues calculation
   const feeSummary = calculateStudentFeeSummary(currentStudent, feePayments);
@@ -37,31 +99,60 @@ export const StudentOverview: React.FC = () => {
       {/* 4 Summary Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Attendance status */}
-        <div className="bg-white p-5 rounded-3xl shadow-xs border border-slate-200 flex items-center justify-between">
+        <div
+          onClick={() => setActiveStudentTab('classmates')}
+          className="bg-white p-5 rounded-3xl shadow-xs border border-slate-200 flex items-center justify-between cursor-pointer hover:border-blue-300 hover:shadow-sm transition-all"
+        >
           <div>
             <span className="text-xs text-slate-400 font-semibold block">আজকের উপস্থিতি স্ট্যাটাস</span>
             <div className="flex items-center gap-1.5 mt-1">
               <span
                 className={`inline-block w-3 h-3 rounded-full ${
-                  todayAtt?.status === 'present'
-                    ? 'bg-blue-500 animate-pulse'
-                    : todayAtt?.status === 'absent'
+                  todayStatus === 'present'
+                    ? 'bg-emerald-500 animate-pulse'
+                    : todayStatus === 'absent'
                     ? 'bg-rose-500'
-                    : 'bg-amber-500'
+                    : todayStatus === 'late'
+                    ? 'bg-amber-500'
+                    : todayStatus === 'leave'
+                    ? 'bg-blue-500'
+                    : 'bg-slate-400'
                 }`}
               ></span>
-              <span className="text-lg font-bold text-slate-900">
-                {todayAtt?.status === 'present'
-                  ? 'উপস্থিত (Present)'
-                  : todayAtt?.status === 'absent'
-                  ? 'অনুপস্থিত'
-                  : 'হাজিরা সম্পন্ন'}
+              <span
+                className={`text-lg font-bold ${
+                  todayStatus === 'present'
+                    ? 'text-emerald-700'
+                    : todayStatus === 'absent'
+                    ? 'text-rose-700'
+                    : todayStatus === 'late'
+                    ? 'text-amber-700'
+                    : todayStatus === 'leave'
+                    ? 'text-blue-700'
+                    : 'text-slate-700'
+                }`}
+              >
+                {todayStatusText}
               </span>
             </div>
-            <span className="text-[11px] text-slate-500">ডিজিটাল এটেনডেন্স সিস্টেম</span>
+            <span className="text-[11px] text-slate-500 block mt-0.5">{todayDetailText}</span>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center">
-            <CheckCircle2 className="w-6 h-6" />
+          <div
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+              todayStatus === 'present'
+                ? 'bg-emerald-100 text-emerald-700'
+                : todayStatus === 'absent'
+                ? 'bg-rose-100 text-rose-700'
+                : 'bg-blue-100 text-blue-700'
+            }`}
+          >
+            {todayStatus === 'present' ? (
+              <CheckCircle2 className="w-6 h-6" />
+            ) : todayStatus === 'absent' ? (
+              <AlertCircle className="w-6 h-6" />
+            ) : (
+              <Calendar className="w-6 h-6" />
+            )}
           </div>
         </div>
 

@@ -26,6 +26,9 @@ import {
   PeriodDefinition,
   SyllabusItem,
   SyllabusTopic,
+  FinancialTransaction,
+  FinancialCategory,
+  PaymentAccountMethod,
 } from '../types';
 import { THEME_PRESETS } from '../data/themePresets';
 import {
@@ -44,10 +47,12 @@ import {
   initialRoutines,
   initialGuardianSmsLogs,
   initialSyllabuses,
+  initialFinancialTransactions,
 } from '../data/initialData';
-import { getHijriDateString } from '../utils/hijriDate';
+import { getHijriDate, getHijriDateString } from '../utils/hijriDate';
 import { getTranslation, translations } from '../utils/translations';
 import { calculateMeritPositions } from '../utils/meritCalculator';
+import { detectMonthCategory } from '../utils/feeCalculator';
 import {
   getCollectionData,
   getSingleDoc,
@@ -213,10 +218,43 @@ interface MadrasaContextType {
   recalculateAllMeritPositions: () => number;
 
   // Fees & Finance
-  submitFeePayment: (payment: Omit<FeePayment, 'id' | 'status' | 'receiptNo' | 'paymentDate'>) => FeePayment;
+  submitFeePayment: (
+    payment: Omit<FeePayment, 'id' | 'status' | 'receiptNo' | 'paymentDate'> & {
+      id?: string;
+      status?: 'approved' | 'pending' | 'rejected';
+      receiptNo?: string;
+      paymentDate?: string;
+      approvedBy?: string;
+    }
+  ) => FeePayment;
   approveFeePayment: (id: string, approverName: string) => void;
   rejectFeePayment: (id: string, reason: string) => void;
   updateFeePaymentStatus?: (id: string, status: 'approved' | 'rejected' | 'pending') => void;
+  deleteFeePayment: (id: string) => void;
+  clearAllFeePayments: () => void;
+
+  // Madrasa Accounts & Income-Expense Transactions
+  financialTransactions: FinancialTransaction[];
+  addFinancialTransaction: (txn: Omit<FinancialTransaction, 'id' | 'createdAt'> & { id?: string; createdAt?: string }) => FinancialTransaction;
+  updateFinancialTransaction: (txn: FinancialTransaction) => void;
+  deleteFinancialTransaction: (id: string) => void;
+  generateBulkSalaryVouchers?: (monthYearStr: string) => number;
+  payTeacherSalary?: (params: {
+    teacherId: string;
+    month: string;
+    baseSalary: number;
+    allowance?: number;
+    deduction?: number;
+    netAmount: number;
+    paymentMethod: PaymentAccountMethod;
+    bankAccountOrNumber?: string;
+    voucherNumber?: string;
+    notes?: string;
+    date?: string;
+  }) => FinancialTransaction;
+  clearAllFinancialTransactions: () => void;
+  clearAllFinancialData: () => void;
+
 
   // Institutional Content & Media
   addNotice: (notice: Omit<Notice, 'id' | 'publishDate'> & { publishDate?: string }) => Notice;
@@ -230,9 +268,11 @@ interface MadrasaContextType {
   sendComplaint: (msg: Omit<ComplaintMessage, 'id' | 'createdAt' | 'status' | 'replies'>) => void;
   replyToComplaint: (complaintId: string, replyMessage: string, repliedByRole: 'teacher' | 'admin', repliedByName: string) => void;
   replyComplaint?: (complaintId: string, response: string, responderName?: string, role?: 'teacher' | 'admin') => void;
+  deleteComplaint: (id: string) => void;
   submitAdmissionApplication: (app: Omit<OnlineAdmissionApplication, 'id' | 'applicationNumber' | 'submittedAt' | 'status'>) => OnlineAdmissionApplication;
   updateAdmissionStatus: (id: string, status: 'submitted' | 'under_review' | 'accepted' | 'rejected' | 'interview' | 'approved') => void;
   approveAdmissionApplication?: (id: string, options?: { customRoll?: number; customMonthlyFee?: number; adminNote?: string }) => Student | null;
+  deleteAdmissionApplication: (id: string) => void;
 
   // Complaints Modal (Opened from 3-bar menu)
   isComplaintsModalOpen: boolean;
@@ -243,7 +283,7 @@ interface MadrasaContextType {
   dismissSmsAlert: () => void;
 
   // Cloud Database & Multi-Year Backup (Firebase Firestore)
-  cloudSyncStatus: 'synced' | 'syncing' | 'offline';
+  cloudSyncStatus: 'synced' | 'syncing' | 'offline' | 'error';
   lastSyncTime: string;
   syncAllToCloud: () => Promise<void>;
   exportFullDatabaseJson: () => void;
@@ -338,11 +378,11 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return getTranslation(key, language);
   };
 
-  // Current session
-  const [currentRole, setCurrentRole] = useState<UserRole>(() => loadFromStorage<UserRole>('role', 'public'));
-  const [currentStudent, setCurrentStudent] = useState<Student | null>(() => loadFromStorage<Student | null>('current_student', initialStudents[0]));
-  const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(() => loadFromStorage<Teacher | null>('current_teacher', initialTeachers[1]));
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => loadFromStorage<boolean>('is_admin_logged_in', false));
+  // Current session (In-memory session, requiring verification on each load)
+  const [currentRole, setCurrentRole] = useState<UserRole>('public');
+  const [currentStudent, setCurrentStudent] = useState<Student | null>(null);
+  const [currentTeacher, setCurrentTeacher] = useState<Teacher | null>(null);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(false);
 
   // Active view tabs
   const [activePublicTab, setActivePublicTab] = useState<string>('home');
@@ -360,7 +400,15 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [students, setStudents] = useState<Student[]>(() => loadFromStorage('students', initialStudents));
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => loadFromStorage('attendance', initialAttendance));
   const [homework, setHomework] = useState<DailyHomework[]>(() => loadFromStorage('homework', initialHomework));
-  const [feePayments, setFeePayments] = useState<FeePayment[]>(() => loadFromStorage('fee_payments', initialFeePayments));
+  const [feePayments, setFeePayments] = useState<FeePayment[]>(() => {
+    const flagKey = 'darul_amanah_finances_cleared_v4';
+    if (!localStorage.getItem(flagKey)) {
+      localStorage.setItem(flagKey, 'true');
+      saveToStorage('fee_payments', []);
+      return [];
+    }
+    return loadFromStorage('fee_payments', initialFeePayments);
+  });
   const [examResults, setExamResults] = useState<ExamResult[]>(() => {
     const loaded = loadFromStorage('exam_results', initialExamResults);
     return calculateMeritPositions(loaded);
@@ -371,6 +419,15 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [admissionApplications, setAdmissionApplications] = useState<OnlineAdmissionApplication[]>(() => loadFromStorage('admissions', []));
   const [routines, setRoutines] = useState<ClassRoutineItem[]>(() => loadFromStorage('routines', initialRoutines));
   const [guardianSmsLogs, setGuardianSmsLogs] = useState<GuardianSmsLog[]>(() => loadFromStorage('guardian_sms_logs', initialGuardianSmsLogs));
+  const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => {
+    const flagKey = 'darul_amanah_finances_cleared_v4';
+    if (!localStorage.getItem(flagKey)) {
+      localStorage.setItem(flagKey, 'true');
+      saveToStorage('financial_transactions', []);
+      return [];
+    }
+    return loadFromStorage('financial_transactions', initialFinancialTransactions);
+  });
   const [syllabuses, setSyllabuses] = useState<SyllabusItem[]>(() => {
     const loaded = loadFromStorage<SyllabusItem[]>('syllabuses', initialSyllabuses);
     const arbiItem = loaded.find((s) => s.id === 'syl-arbi-1');
@@ -383,7 +440,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   // Cloud Sync & Multi-Year Backup (Firebase Firestore)
-  const [cloudSyncStatus, setCloudStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
+  const [cloudSyncStatus, setCloudStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
   const [lastSyncTime, setLastSyncTime] = useState<string>(() => new Date().toLocaleTimeString('bn-BD'));
 
   // Auto Real-Time Cloud Synchronization (Firebase Firestore onSnapshot)
@@ -407,6 +464,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         const currentStoredAdmissions = loadFromStorage('admissions', [] as OnlineAdmissionApplication[]);
         const currentStoredRoutines = loadFromStorage('routines', initialRoutines);
         const currentStoredSmsLogs = loadFromStorage('guardian_sms_logs', initialGuardianSmsLogs);
+        const currentStoredFinancialTransactions = loadFromStorage('financial_transactions', initialFinancialTransactions);
         const currentStoredSyllabuses = loadFromStorage('syllabuses', initialSyllabuses);
         const currentStoredInfo = loadFromStorage('madrasa_info', initialMadrasaInfo);
         const currentStoredPrayers = loadFromStorage('prayer_times', initialPrayerTimes);
@@ -422,6 +480,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
             seedCollection('attendances', currentStoredAttendance),
             seedCollection('homework', currentStoredHomework),
             seedCollection('fee_payments', currentStoredFeePayments),
+            seedCollection('financial_transactions', currentStoredFinancialTransactions),
             seedCollection('exam_results', currentStoredExamResults),
             seedCollection('notices', currentStoredNotices),
             seedCollection('media_events', currentStoredMediaEvents),
@@ -441,6 +500,18 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (!isMounted) return;
 
         // 2. Attach Live Real-Time onSnapshot Subscriptions for all Collections
+        const handleSyncError = (err: any) => {
+          if (isMounted) {
+            if (err?.code === 'permission-denied') {
+              console.warn('[Firestore Permission Denied]: Check firestore.rules or database connection');
+              setCloudStatus('error');
+            } else {
+              console.warn('[Firestore Sync Warning]:', err?.message || err);
+              setCloudStatus('offline');
+            }
+          }
+        };
+
         unsubscribes.push(
           subscribeToCollection<Student>('students', (data) => {
             if (isMounted && data.length > 0) {
@@ -448,46 +519,49 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
               setCloudStatus('synced');
               setLastSyncTime(new Date().toLocaleTimeString('bn-BD'));
             }
-          }),
+          }, handleSyncError),
           subscribeToCollection<Teacher>('teachers', (data) => {
             if (isMounted && data.length > 0) {
               setTeachers(data);
               setCloudStatus('synced');
             }
-          }),
+          }, handleSyncError),
           subscribeToCollection<AcademicClass>('classes', (data) => {
             if (isMounted && data.length > 0) setClasses(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<AttendanceRecord>('attendances', (data) => {
             if (isMounted && data.length > 0) setAttendance(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<DailyHomework>('homework', (data) => {
             if (isMounted && data.length > 0) setHomework(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<FeePayment>('fee_payments', (data) => {
             if (isMounted && data.length > 0) setFeePayments(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<ExamResult>('exam_results', (data) => {
             if (isMounted && data.length > 0) setExamResults(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<Notice>('notices', (data) => {
             if (isMounted && data.length > 0) setNotices(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<MediaEvent>('media_events', (data) => {
             if (isMounted && data.length > 0) setMediaEvents(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<ComplaintMessage>('complaints', (data) => {
             if (isMounted && data.length > 0) setComplaints(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<OnlineAdmissionApplication>('admission_applications', (data) => {
             if (isMounted && data.length > 0) setAdmissionApplications(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<ClassRoutineItem>('routines', (data) => {
             if (isMounted && data.length > 0) setRoutines(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<GuardianSmsLog>('guardian_sms_logs', (data) => {
             if (isMounted && data.length > 0) setGuardianSmsLogs(data);
-          }),
+          }, handleSyncError),
+          subscribeToCollection<FinancialTransaction>('financial_transactions', (data) => {
+            if (isMounted && data.length > 0) setFinancialTransactions(data);
+          }, handleSyncError),
           subscribeToCollection<SyllabusItem>('syllabuses', (data) => {
             if (isMounted) {
               if (data.length > 0) {
@@ -507,25 +581,27 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 seedCollection('syllabuses', initialSyllabuses);
               }
             }
-          }),
+          }, handleSyncError),
           subscribeToCollection<PrayerTimeItem & { id: string }>('prayer_times', (data) => {
             if (isMounted && data.length > 0) setPrayerTimes(data);
-          }),
+          }, handleSyncError),
           subscribeToCollection<InstitutionInfo>('institutions', (data) => {
             if (isMounted && data.length > 0) setInstitutions(data);
-          }),
+          }, handleSyncError),
           subscribeToSingleDoc<MadrasaInfo>('madrasa_info', 'main_info', (data) => {
             if (isMounted && (data.nameBangla || data.name)) setMadrasaInfo(data);
-          })
+          }, handleSyncError)
         );
 
         if (isMounted) {
           setCloudStatus('synced');
           setLastSyncTime(new Date().toLocaleTimeString('bn-BD'));
         }
-      } catch (err) {
-        console.debug('Real-time sync initialized with local backup fallback:', err);
-        if (isMounted) setCloudStatus('synced');
+      } catch (err: any) {
+        console.warn('Real-time sync initialized with local backup fallback:', err);
+        if (isMounted) {
+          setCloudStatus(err?.code === 'permission-denied' ? 'error' : 'offline');
+        }
       }
     };
 
@@ -574,7 +650,85 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => saveToStorage('admissions', admissionApplications), [admissionApplications]);
   useEffect(() => saveToStorage('routines', routines), [routines]);
   useEffect(() => saveToStorage('guardian_sms_logs', guardianSmsLogs), [guardianSmsLogs]);
+  useEffect(() => saveToStorage('financial_transactions', financialTransactions), [financialTransactions]);
   useEffect(() => saveToStorage('syllabuses', syllabuses), [syllabuses]);
+
+  // Helper: Auto generate FinancialTransaction record for an approved FeePayment
+  const createTransactionForFee = (feeItem: FeePayment, approverName = 'হিসাব শাখা'): FinancialTransaction => {
+    let category: FinancialCategory = 'student_tuition';
+    let categoryLabel = 'ছাত্রদের মাসিক বেতন ও বোর্ডিং ফি';
+    if (feeItem.feeType === 'admission') {
+      category = 'admission_fee';
+      categoryLabel = 'ভর্তি ও সেশন ফি';
+    } else if (feeItem.feeType === 'exam') {
+      category = 'exam_fee';
+      categoryLabel = 'পরীক্ষার ফি ও খাতা বাবদ আয়';
+    } else if (feeItem.feeType === 'boarding') {
+      category = 'lillah_boarding';
+      categoryLabel = 'লিল্লাহ ফান্ড ও গোরাবা এতিমখানা';
+    } else if (feeItem.feeType === 'books') {
+      category = 'book_sale';
+      categoryLabel = 'কিতাব ও খাতা-কলম বিক্রি';
+    }
+
+    let txnDate = new Date().toISOString().split('T')[0];
+    if (feeItem.paymentDate && /^\d{4}-\d{2}-\d{2}$/.test(feeItem.paymentDate)) {
+      txnDate = feeItem.paymentDate;
+    }
+
+    const receiptStr = feeItem.receiptNo || feeItem.receiptNumber || `REC-${Date.now().toString().slice(-6)}`;
+    const studentNameStr = feeItem.studentNameBangla || feeItem.studentName || 'শিক্ষার্থী';
+    const classStr = feeItem.className ? ` (${feeItem.className})` : '';
+    const feeTypeStr = feeItem.feeTypeLabel || (feeItem.feeType === 'admission' ? 'ভর্তি ফি' : feeItem.feeType === 'exam' ? 'পরীক্ষার ফি' : 'মাসিক বেতন ও ফি');
+
+    return {
+      id: `txn-fee-${feeItem.id}`,
+      voucherNumber: `VR-${receiptStr.replace(/[^A-Za-z0-9]/g, '') || Date.now().toString().slice(-6)}`,
+      type: 'income',
+      category,
+      categoryLabel,
+      title: `${studentNameStr}${classStr} - ${feeItem.month} ${feeTypeStr}`,
+      amount: Number(feeItem.amount) || 0,
+      date: txnDate,
+      hijriDate: getHijriDateString(),
+      paymentMethod: (feeItem.paymentMethod as any) || 'cash',
+      bankAccountOrNumber: feeItem.transactionId || receiptStr,
+      partyName: `${studentNameStr} (আইডি: ${feeItem.studentId})`,
+      partyPhone: feeItem.senderPhone || '',
+      description: `ছাত্র বেতন/ফি আদায় রসিদ নং: ${receiptStr}${feeItem.waivedAmount ? ` (মওকুফ: ৳${feeItem.waivedAmount})` : ''}`,
+      recordedBy: approverName || 'হিসাব শাখা',
+      referenceId: feeItem.id,
+      isAutoGenerated: true,
+      createdAt: feeItem.paidAt || new Date().toISOString(),
+    };
+  };
+
+  // Auto-sync approved student fee payments into financial transactions if missing
+  useEffect(() => {
+    const approvedFees = feePayments.filter((f) => f.status === 'approved' && Number(f.amount) > 0);
+    if (approvedFees.length === 0) return;
+
+    const existingRefIds = new Set(
+      financialTransactions
+        .map((t) => t.referenceId)
+        .filter(Boolean)
+    );
+    const existingTxnIds = new Set(financialTransactions.map((t) => t.id));
+
+    const missingTransactions: FinancialTransaction[] = [];
+    approvedFees.forEach((fee) => {
+      const expectedTxnId = `txn-fee-${fee.id}`;
+      if (!existingRefIds.has(fee.id) && !existingTxnIds.has(expectedTxnId)) {
+        const txn = createTransactionForFee(fee, fee.approvedBy || 'হিসাব শাখা');
+        missingTransactions.push(txn);
+        saveDocToFirestore('financial_transactions', txn.id, txn);
+      }
+    });
+
+    if (missingTransactions.length > 0) {
+      setFinancialTransactions((prev) => [...missingTransactions, ...prev]);
+    }
+  }, [feePayments, financialTransactions.length]);
 
   const updateInstitution = (updatedInst: InstitutionInfo) => {
     setInstitutions((prev) => prev.map((inst) => (inst.id === updatedInst.id ? updatedInst : inst)));
@@ -606,8 +760,8 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, message: 'অনুগ্রহ করে ছাত্র পাসওয়ার্ড প্রদান করুন।' };
     }
 
-    const expectedPass = (matched.password || 'student123').trim();
-    if (inputPass !== expectedPass && inputPass !== 'student123' && inputPass !== '123456') {
+    const expectedPass = (matched.password || '').trim();
+    if (!expectedPass || inputPass !== expectedPass) {
       return { success: false, message: 'প্রদত্ত ছাত্র পাসওয়ার্ডটি সঠিক নয়।' };
     }
 
@@ -625,7 +779,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return { success: false, message: 'অনুগ্রহ করে শিক্ষক/উস্তাদের নাম বা আইডি প্রদান করুন।' };
     }
     if (!inputPass) {
-      return { success: false, message: 'অনুগ্রহ করে পাসওয়ার্ড বা মোবাইল নম্বর প্রদান করুন।' };
+      return { success: false, message: 'অনুগ্রহ করে শিক্ষকের সঠিক পাসওয়ার্ড প্রদান করুন।' };
     }
 
     const normalizePhone = (str?: string): string => {
@@ -641,43 +795,28 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const rawLower = raw.toLowerCase();
     const rawPhoneDigits = normalizePhone(raw);
 
-    // Find teacher by Name (Bangla or English), ID, Phone, or Email
-    const matched = teachers.find((t) => {
-      const nameBanglaMatch = t.nameBangla.toLowerCase() === rawLower || t.nameBangla.toLowerCase().includes(rawLower) || rawLower.includes(t.nameBangla.toLowerCase());
-      const nameEnglishMatch = t.nameEnglish ? (t.nameEnglish.toLowerCase() === rawLower || t.nameEnglish.toLowerCase().includes(rawLower) || rawLower.includes(t.nameEnglish.toLowerCase())) : false;
-      const idMatch = t.id.toLowerCase() === rawLower;
-      const emailMatch = t.email.toLowerCase() === rawLower;
-      const phoneDigits = normalizePhone(t.phone);
-      const phoneMatch = rawPhoneDigits && phoneDigits && (phoneDigits === rawPhoneDigits || phoneDigits.endsWith(rawPhoneDigits) || rawPhoneDigits.endsWith(phoneDigits));
-
-      return nameBanglaMatch || nameEnglishMatch || idMatch || emailMatch || phoneMatch;
-    });
+    // Find teacher strictly: ID first, then exact email, exact phone, or exact name
+    const matched =
+      teachers.find((t) => t.id.toLowerCase() === rawLower) ||
+      teachers.find((t) => t.email && t.email.toLowerCase() === rawLower) ||
+      teachers.find((t) => {
+        const phoneDigits = normalizePhone(t.phone);
+        return rawPhoneDigits && phoneDigits && phoneDigits === rawPhoneDigits;
+      }) ||
+      teachers.find((t) => t.nameBangla.trim().toLowerCase() === rawLower) ||
+      teachers.find((t) => t.nameEnglish && t.nameEnglish.trim().toLowerCase() === rawLower) ||
+      teachers.find((t) => t.nameBangla.trim().toLowerCase().includes(rawLower) && rawLower.length >= 4);
 
     if (!matched) {
-      return { success: false, message: 'প্রদত্ত নামে কোনো উস্তাদ/শিক্ষক নিবন্ধিত পাওয়া যায়নি। তালিকা থেকে সঠিক নাম নির্বাচন করুন।' };
+      return { success: false, message: 'প্রদত্ত তথ্য অনুযায়ী কোনো উস্তাদ/শিক্ষক নিবন্ধিত পাওয়া যায়নি। তালিকা থেকে সঠিক নাম বা আইডি নির্বাচন করুন।' };
     }
 
-    // Check Password or Mobile Number
-    const inputPhoneDigits = normalizePhone(inputPass);
-    const teacherPhoneDigits = normalizePhone(matched.phone);
-    const teacherPass = matched.password || 'password123';
-
-    const isPhoneMatched = Boolean(
-      inputPhoneDigits &&
-      teacherPhoneDigits &&
-      (inputPhoneDigits === teacherPhoneDigits ||
-        teacherPhoneDigits.endsWith(inputPhoneDigits) ||
-        inputPhoneDigits.endsWith(teacherPhoneDigits))
-    );
-
-    const isPasswordMatched =
-      inputPass === teacherPass ||
-      inputPass === matched.phone;
-
-    if (!isPhoneMatched && !isPasswordMatched) {
+    // Require matching teacher password
+    const teacherPass = (matched.password || '').trim();
+    if (teacherPass && inputPass !== teacherPass) {
       return {
         success: false,
-        message: 'ভুল পাসওয়ার্ড বা মোবাইল নম্বর! অনুগ্রহ করে সঠিক পাসওয়ার্ড প্রদান করুন।',
+        message: 'ভুল পাসওয়ার্ড! অনুগ্রহ করে সঠিক শিক্ষক পাসওয়ার্ড প্রদান করুন।',
       };
     }
 
@@ -688,9 +827,9 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const loginAdmin = (password: string) => {
-    const expected = madrasaInfo.adminPassword || 'admin';
+    const expected = (madrasaInfo.adminPassword || '').trim();
     const inputPass = password.trim();
-    if (inputPass === expected || inputPass === 'admin' || inputPass === 'admin123' || inputPass === 'darulamanah') {
+    if (expected && inputPass === expected) {
       setIsAdminLoggedIn(true);
       setCurrentRole('admin');
       setActiveAdminTab('dashboard');
@@ -701,26 +840,20 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const logout = () => {
     setCurrentRole('public');
+    setCurrentStudent(null);
+    setCurrentTeacher(null);
     setIsAdminLoggedIn(false);
   };
 
-  const quickSwitchRole = (role: UserRole, targetId?: string) => {
-    if (role === 'student') {
-      const student = targetId ? students.find((s) => s.id === targetId) || students[0] : students[0];
-      setCurrentStudent(student);
-      setCurrentRole('student');
-      setActiveStudentTab('overview');
-    } else if (role === 'teacher') {
-      const teacher = targetId ? teachers.find((t) => t.id === targetId) || teachers[1] : teachers[1];
-      setCurrentTeacher(teacher);
-      setCurrentRole('teacher');
-      setActiveTeacherTab('attendance');
-    } else if (role === 'admin') {
-      setIsAdminLoggedIn(true);
-      setCurrentRole('admin');
-      setActiveAdminTab('dashboard');
-    } else {
+  const quickSwitchRole = (role: UserRole) => {
+    // Role switching without proper password authentication is permanently disabled
+    if (role === 'public') {
       setCurrentRole('public');
+      setCurrentStudent(null);
+      setCurrentTeacher(null);
+      setIsAdminLoggedIn(false);
+    } else {
+      console.warn('Direct role bypass is permanently disabled. Please use official login dialog with credentials.');
     }
   };
 
@@ -740,15 +873,35 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Students Management
   const addStudent = (st: Omit<Student, 'id'> & { id?: string }): Student => {
-    const nextRoll = students.filter((s) => s.classId === st.classId).length + 1;
-    const generatedId = st.id && st.id.trim() ? st.id.trim() : `DA-2026-${Math.floor(100 + Math.random() * 900)}`;
+    const classStudents = students.filter((s) => s.classId === st.classId);
+    const maxRoll = classStudents.length > 0 ? Math.max(...classStudents.map((s) => s.roll || 0)) : 0;
+    const nextRoll = maxRoll + 1;
+    let generatedId = st.id && st.id.trim() ? st.id.trim() : '';
+    if (!generatedId) {
+      const curYear = new Date().getFullYear();
+      let attempt = 0;
+      do {
+        const randNum = Math.floor(100 + Math.random() * 900);
+        generatedId = `DA-${curYear}-${randNum}`;
+        attempt++;
+      } while (students.some((s) => s.id === generatedId) && attempt < 100);
+    }
+    const randomPass = Math.floor(100000 + Math.random() * 900000).toString();
     const newStudent: Student = {
       ...st,
       id: generatedId,
       roll: st.roll || nextRoll,
-      password: st.password || 'student123',
+      password: st.password || randomPass,
     };
-    setStudents((prev) => [...prev, newStudent]);
+    setStudents((prev) => {
+      const existingIdx = prev.findIndex((s) => s.id === newStudent.id);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = newStudent;
+        return updated;
+      }
+      return [...prev, newStudent];
+    });
     saveDocToFirestore('students', newStudent.id, newStudent);
     return newStudent;
   };
@@ -768,13 +921,30 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Teachers Management
   const addTeacher = (tc: Omit<Teacher, 'id'> & { id?: string }): Teacher => {
-    const generatedId = tc.id && tc.id.trim() ? tc.id.trim() : `T-${Math.floor(100 + Math.random() * 900)}`;
+    let generatedId = tc.id && tc.id.trim() ? tc.id.trim() : '';
+    if (!generatedId) {
+      let attempt = 0;
+      do {
+        const randNum = Math.floor(100 + Math.random() * 900);
+        generatedId = `T-${randNum}`;
+        attempt++;
+      } while (teachers.some((t) => t.id === generatedId) && attempt < 100);
+    }
+    const randomPass = Math.floor(100000 + Math.random() * 900000).toString();
     const newTeacher: Teacher = {
       ...tc,
       id: generatedId,
-      password: tc.password || 'password123',
+      password: tc.password || randomPass,
     };
-    setTeachers((prev) => [...prev, newTeacher]);
+    setTeachers((prev) => {
+      const existingIdx = prev.findIndex((t) => t.id === newTeacher.id);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        updated[existingIdx] = newTeacher;
+        return updated;
+      }
+      return [...prev, newTeacher];
+    });
     saveDocToFirestore('teachers', newTeacher.id, newTeacher);
     return newTeacher;
   };
@@ -980,69 +1150,87 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const saveBulkAttendance = (records: Omit<AttendanceRecord, 'id' | 'timestamp'>[]) => {
     const nowTime = new Date().toLocaleTimeString('bn-BD', { hour: '2-digit', minute: '2-digit' });
     const newlySentSms: GuardianSmsLog[] = [];
+    const recordsToSave: AttendanceRecord[] = [];
 
-    setAttendance((prev) => {
-      const updated = [...prev];
-      records.forEach((rec) => {
-        const student = students.find((s) => s.id === rec.studentId);
-        const hijri = rec.hijriDate || getHijriDateString(new Date(rec.date));
-        const periodTitle = rec.periodName || (rec.periodNumber ? `${rec.periodNumber}ম ঘন্টা` : '১ম ঘন্টা');
-        const phone = rec.guardianPhone || student?.guardianPhone || student?.phone;
+    // 1. Process records and determine SMS alerts outside updater
+    const updated = [...attendance];
+    records.forEach((rec) => {
+      const student = students.find(
+        (s) => s.id.trim().toLowerCase() === rec.studentId.trim().toLowerCase()
+      );
+      const hijri = rec.hijriDate || getHijriDateString(new Date(rec.date));
+      const periodTitle = rec.periodName || (rec.periodNumber ? `${rec.periodNumber}ম ঘন্টা` : '১ম ঘন্টা');
+      const phone = rec.guardianPhone || student?.guardianPhone || student?.phone;
 
-        let smsSent = rec.smsAlertSent || false;
+      const recPeriod = Number(rec.periodNumber || 1);
+      const recStudentIdNorm = rec.studentId.trim().toLowerCase();
 
-        // Auto trigger SMS if student is absent in this hourly period
-        if (rec.status === 'absent' && !smsSent) {
-          const studentName = student ? student.nameBangla : 'শিক্ষার্থী';
-          const guardianName = student?.fatherName || 'অভিভাবক';
-          const guardianPhone = phone || '০১৭০০০০০০০০';
-          const smsText = `সম্মানিত ${guardianName}, আপনার সন্তান ${studentName} (আইডি: ${rec.studentId}) আজ ${rec.date} (${hijri}) ${periodTitle} এ অনুপস্থিত ছিল। - দারুল আমানাহ মাদরাসা`;
+      const existingIdx = updated.findIndex(
+        (a) =>
+          a.date === rec.date &&
+          a.studentId?.trim().toLowerCase() === recStudentIdNorm &&
+          Number(a.periodNumber || 1) === recPeriod
+      );
 
-          const smsLog: GuardianSmsLog = {
-            id: `sms-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-            studentId: rec.studentId,
-            studentName,
-            guardianPhone,
-            className: rec.className || student?.className || 'জামাত',
-            periodNumber: rec.periodNumber || 1,
-            periodName: periodTitle,
-            messageText: smsText,
-            message: smsText,
-            sentAt: nowTime,
-            date: rec.date,
-            status: 'sent',
-          };
-          newlySentSms.push(smsLog);
-          smsSent = true;
-          saveDocToFirestore('guardian_sms_logs', smsLog.id, smsLog);
-        }
+      const existingRecord = existingIdx >= 0 ? updated[existingIdx] : undefined;
+      let smsSent = rec.smsAlertSent || existingRecord?.smsAlertSent || false;
 
-        const existingIdx = updated.findIndex(
-          (a) => a.date === rec.date && a.classId === rec.classId && a.studentId === rec.studentId && a.periodNumber === rec.periodNumber
-        );
+      // Auto trigger SMS if student is absent in this hourly period and not sent yet
+      if (rec.status === 'absent' && !smsSent) {
+        const studentName = student ? student.nameBangla : 'শিক্ষার্থী';
+        const guardianName = student?.fatherName || 'অভিভাবক';
+        const guardianPhone = phone || '০১৭০০০০০০০০';
+        const smsText = `সম্মানিত ${guardianName}, আপনার সন্তান ${studentName} (আইডি: ${rec.studentId}) আজ ${rec.date} (${hijri}) ${periodTitle} এ অনুপস্থিত ছিল। - দারুল আমানাহ মাদরাসা`;
 
-        const newRecord: AttendanceRecord = {
-          ...rec,
-          id: existingIdx >= 0 ? updated[existingIdx].id : `att-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          timestamp: nowTime,
-          hijriDate: hijri,
+        const smsLog: GuardianSmsLog = {
+          id: `sms-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          studentId: rec.studentId,
+          studentName,
+          guardianPhone,
+          className: rec.className || student?.className || 'জামাত',
+          periodNumber: rec.periodNumber || 1,
           periodName: periodTitle,
-          guardianPhone: phone,
-          smsAlertSent: smsSent,
+          messageText: smsText,
+          message: smsText,
+          sentAt: nowTime,
+          date: rec.date,
+          status: 'sent',
         };
+        newlySentSms.push(smsLog);
+        smsSent = true;
+      }
 
-        saveDocToFirestore('attendances', newRecord.id, newRecord);
+      const newRecord: AttendanceRecord = {
+        ...rec,
+        id: existingRecord ? existingRecord.id : `att-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        timestamp: nowTime,
+        hijriDate: hijri,
+        periodName: periodTitle,
+        guardianPhone: phone,
+        smsAlertSent: smsSent,
+      };
 
-        if (existingIdx >= 0) {
-          updated[existingIdx] = newRecord;
-        } else {
-          updated.push(newRecord);
-        }
-      });
-      return updated;
+      recordsToSave.push(newRecord);
+
+      if (existingIdx >= 0) {
+        updated[existingIdx] = newRecord;
+      } else {
+        updated.push(newRecord);
+      }
+    });
+
+    // 2. Pure state update
+    setAttendance(updated);
+
+    // 3. Write to Firestore
+    recordsToSave.forEach((record) => {
+      saveDocToFirestore('attendances', record.id, record);
     });
 
     if (newlySentSms.length > 0) {
+      newlySentSms.forEach((sms) => {
+        saveDocToFirestore('guardian_sms_logs', sms.id, sms);
+      });
       setGuardianSmsLogs((prev) => [...newlySentSms, ...prev]);
       setLatestSmsAlert(newlySentSms[0]);
     }
@@ -1050,7 +1238,8 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Student Attendance Statistics & Monthly Breakdown (1-Year Archive)
   const getStudentAttendanceStats = (studentId: string, selectedMonth?: string): StudentAttendanceSummary => {
-    const studentRecords = attendance.filter((a) => a.studentId === studentId);
+    const normId = studentId.trim().toLowerCase();
+    const studentRecords = attendance.filter((a) => a.studentId?.trim().toLowerCase() === normId);
     
     // Total count across full year
     let presentCount = 0;
@@ -1128,12 +1317,10 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (res.isPassedAll === false || res.percentage < 40) return;
 
       const currentTop = topByClass[res.classId];
-      const studentInfo = students.find(
-        (s) =>
-          s.id.trim().toLowerCase() === res.studentId.trim().toLowerCase() ||
-          s.nameBangla.trim() === res.studentName.trim() ||
-          (s.roll === res.roll && s.classId === res.classId)
-      );
+      const studentInfo =
+        students.find((s) => s.id.trim().toLowerCase() === res.studentId.trim().toLowerCase()) ||
+        students.find((s) => s.classId === res.classId && s.nameBangla.trim() === res.studentName.trim()) ||
+        students.find((s) => s.classId === res.classId && s.roll === res.roll);
 
       const resolvedPhoto =
         studentInfo?.photoUrl ||
@@ -1281,36 +1468,80 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Fees
-  const submitFeePayment = (payment: Omit<FeePayment, 'id' | 'status' | 'receiptNo' | 'paymentDate'>) => {
-    const receipt = `REC-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+  const submitFeePayment = (
+    payment: Omit<FeePayment, 'id' | 'status' | 'receiptNo' | 'paymentDate'> & {
+      id?: string;
+      status?: 'approved' | 'pending' | 'rejected';
+      receiptNo?: string;
+      paymentDate?: string;
+      approvedBy?: string;
+    }
+  ) => {
+    const receipt = payment.receiptNo || `REC-2026-${Math.floor(10000 + Math.random() * 90000)}`;
+    const category = payment.monthCategory || detectMonthCategory(payment.month);
+    const id = payment.id || `fee-${Date.now()}`;
+    const status = payment.status || 'pending';
     const newPayment: FeePayment = {
       ...payment,
-      id: `fee-${Date.now()}`,
-      status: 'pending',
+      id,
+      status,
       receiptNo: receipt,
-      paymentDate: new Date().toLocaleDateString('bn-BD'),
+      receiptNumber: receipt,
+      monthCategory: category,
+      paymentDate: payment.paymentDate || new Date().toLocaleDateString('bn-BD'),
     };
     setFeePayments((prev) => [newPayment, ...prev]);
     saveDocToFirestore('fee_payments', newPayment.id, newPayment);
+
+    // If submitted directly as approved (e.g. manual counter payment), sync into financial transactions
+    if (status === 'approved' && Number(newPayment.amount) > 0) {
+      const txn = createTransactionForFee(newPayment, newPayment.approvedBy || 'হিসাব শাখা');
+      setFinancialTransactions((prev) => {
+        const filtered = prev.filter((t) => t.referenceId !== newPayment.id && t.id !== txn.id);
+        return [txn, ...filtered];
+      });
+      saveDocToFirestore('financial_transactions', txn.id, txn);
+    }
+
     return newPayment;
   };
 
   const approveFeePayment = (id: string, approverName: string) => {
+    let targetFeeItem: FeePayment | undefined;
     setFeePayments((prev) =>
       prev.map((f) => {
         if (f.id === id) {
-          const updated = {
+          const updated: FeePayment = {
             ...f,
-            status: 'approved' as const,
-            approvedBy: approverName,
+            status: 'approved',
+            approvedBy: approverName || 'অ্যাডমিন',
             approvalDate: new Date().toLocaleDateString('bn-BD'),
           };
+          targetFeeItem = updated;
           saveDocToFirestore('fee_payments', updated.id, updated);
           return updated;
         }
         return f;
       })
     );
+
+    const feeToSync = targetFeeItem || feePayments.find((f) => f.id === id);
+    if (feeToSync) {
+      const approvedItem: FeePayment = {
+        ...feeToSync,
+        status: 'approved',
+        approvedBy: approverName || 'অ্যাডমিন',
+        approvalDate: new Date().toLocaleDateString('bn-BD'),
+      };
+      if (Number(approvedItem.amount) > 0) {
+        const txn = createTransactionForFee(approvedItem, approverName || 'অ্যাডমিন');
+        setFinancialTransactions((prev) => {
+          const filtered = prev.filter((t) => t.referenceId !== id && t.id !== txn.id);
+          return [txn, ...filtered];
+        });
+        saveDocToFirestore('financial_transactions', txn.id, txn);
+      }
+    }
   };
 
   const rejectFeePayment = (id: string, reason: string) => {
@@ -1324,7 +1555,174 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return f;
       })
     );
+    // Remove from financial transactions if previously approved
+    setFinancialTransactions((prev) => prev.filter((t) => t.referenceId !== id && t.id !== `txn-fee-${id}`));
+    deleteDocFromFirestore('financial_transactions', `txn-fee-${id}`);
   };
+
+  const deleteFeePayment = (id: string) => {
+    setFeePayments((prev) => prev.filter((f) => f.id !== id));
+    deleteDocFromFirestore('fee_payments', id);
+    // Also remove any linked financial transaction created for this fee payment
+    setFinancialTransactions((prev) => prev.filter((t) => t.referenceId !== id && t.id !== `txn-fee-${id}`));
+    const linkedTxn = financialTransactions.find((t) => t.referenceId === id || t.id === `txn-fee-${id}`);
+    if (linkedTxn) {
+      deleteDocFromFirestore('financial_transactions', linkedTxn.id);
+    }
+    deleteDocFromFirestore('financial_transactions', `txn-fee-${id}`);
+  };
+
+  const clearAllFeePayments = () => {
+    feePayments.forEach((f) => {
+      deleteDocFromFirestore('fee_payments', f.id);
+      deleteDocFromFirestore('financial_transactions', `txn-fee-${f.id}`);
+    });
+    setFeePayments([]);
+    saveToStorage('fee_payments', []);
+    setFinancialTransactions((prev) => prev.filter((t) => !t.referenceId || !t.id.startsWith('txn-fee-')));
+  };
+
+  // Madrasa Accounts & Income-Expense Transactions Handlers
+  const addFinancialTransaction = (
+    txn: Omit<FinancialTransaction, 'id' | 'createdAt'> & { id?: string; createdAt?: string }
+  ): FinancialTransaction => {
+    const id = txn.id || `txn-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const createdAt = txn.createdAt || new Date().toISOString();
+    const newTxn: FinancialTransaction = {
+      ...txn,
+      id,
+      createdAt,
+      hijriDate: txn.hijriDate || getHijriDateString(),
+    };
+    setFinancialTransactions((prev) => [newTxn, ...prev]);
+    saveDocToFirestore('financial_transactions', newTxn.id, newTxn);
+    return newTxn;
+  };
+
+  const updateFinancialTransaction = (txn: FinancialTransaction) => {
+    setFinancialTransactions((prev) => prev.map((t) => (t.id === txn.id ? txn : t)));
+    saveDocToFirestore('financial_transactions', txn.id, txn);
+  };
+
+  const deleteFinancialTransaction = (id: string) => {
+    setFinancialTransactions((prev) => prev.filter((t) => t.id !== id));
+    deleteDocFromFirestore('financial_transactions', id);
+  };
+
+  const clearAllFinancialTransactions = () => {
+    financialTransactions.forEach((t) => deleteDocFromFirestore('financial_transactions', t.id));
+    setFinancialTransactions([]);
+    saveToStorage('financial_transactions', []);
+  };
+
+  const clearAllFinancialData = () => {
+    clearAllFeePayments();
+    clearAllFinancialTransactions();
+  };
+
+  const generateBulkSalaryVouchers = (monthYearStr: string): number => {
+    const today = new Date().toISOString().split('T')[0];
+    const hijri = getHijriDateString();
+    let count = 0;
+    const newVouchers: FinancialTransaction[] = [];
+
+    teachers.forEach((teacher, idx) => {
+      const exists = financialTransactions.some(
+        (t) =>
+          t.category === 'teacher_salary' &&
+          t.title.includes(teacher.nameBangla) &&
+          t.title.includes(monthYearStr)
+      );
+
+      if (!exists) {
+        const baseSalary = teacher.salary || 18000;
+
+        const voucher: FinancialTransaction = {
+          id: `txn-sal-${Date.now()}-${idx}`,
+          voucherNumber: `VP-${monthYearStr.replace(/\s+/g, '')}-${idx + 101}`,
+          type: 'expense',
+          category: 'teacher_salary',
+          categoryLabel: 'উস্তাদ ও শিক্ষকবৃন্দের মাসিক বেতন',
+          title: `${teacher.nameBangla} - ${monthYearStr} হাদিয়া/বেতন`,
+          amount: baseSalary,
+          baseSalary: baseSalary,
+          allowanceAmount: 0,
+          deductionAmount: 0,
+          salaryMonth: monthYearStr,
+          referenceId: teacher.id,
+          date: today,
+          hijriDate: hijri,
+          paymentMethod: 'cash',
+          partyName: teacher.nameBangla,
+          partyPhone: teacher.phone,
+          description: `${teacher.designation} এর ${monthYearStr} মাসের মাসিক নির্ধারিত হাদিয়া/বেতন প্রদান।`,
+          recordedBy: 'হিসাব শাখা',
+          createdAt: new Date().toISOString(),
+        };
+        newVouchers.push(voucher);
+        count++;
+      }
+    });
+
+    if (newVouchers.length > 0) {
+      setFinancialTransactions((prev) => [...newVouchers, ...prev]);
+      newVouchers.forEach((v) => saveDocToFirestore('financial_transactions', v.id, v));
+    }
+
+    return count;
+  };
+
+  const payTeacherSalary = (params: {
+    teacherId: string;
+    month: string;
+    baseSalary: number;
+    allowance?: number;
+    deduction?: number;
+    netAmount: number;
+    paymentMethod: PaymentAccountMethod;
+    bankAccountOrNumber?: string;
+    voucherNumber?: string;
+    notes?: string;
+    date?: string;
+  }): FinancialTransaction => {
+    const teacher = teachers.find((t) => t.id === params.teacherId);
+    const today = params.date || new Date().toISOString().split('T')[0];
+    const hijri = getHijriDateString();
+    const partyName = teacher ? teacher.nameBangla : 'উস্তাদ';
+    const partyPhone = teacher ? teacher.phone : '';
+    const vNum = params.voucherNumber || `VP-SAL-${Date.now().toString().slice(-6)}`;
+
+    const newTxn: FinancialTransaction = {
+      id: `txn-sal-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      voucherNumber: vNum,
+      type: 'expense',
+      category: 'teacher_salary',
+      categoryLabel: 'উস্তাদ ও শিক্ষকবৃন্দের মাসিক বেতন',
+      title: `${partyName} - ${params.month} হাদিয়া/বেতন`,
+      amount: Number(params.netAmount) || 0,
+      baseSalary: Number(params.baseSalary) || 0,
+      allowanceAmount: Number(params.allowance) || 0,
+      deductionAmount: Number(params.deduction) || 0,
+      salaryMonth: params.month,
+      date: today,
+      hijriDate: hijri,
+      paymentMethod: params.paymentMethod,
+      bankAccountOrNumber: params.bankAccountOrNumber,
+      partyName,
+      partyPhone,
+      referenceId: params.teacherId,
+      description: `${teacher?.designation || 'উস্তাদ'} এর ${params.month} মাসের হাদিয়া/বেতন। ${
+        params.notes ? `(মন্তব্য: ${params.notes})` : ''
+      }`,
+      recordedBy: 'হিসাব শাখা',
+      createdAt: new Date().toISOString(),
+    };
+
+    setFinancialTransactions((prev) => [newTxn, ...prev]);
+    saveDocToFirestore('financial_transactions', newTxn.id, newTxn);
+    return newTxn;
+  };
+
 
   // Notices
   const addNotice = (notice: Omit<Notice, 'id' | 'publishDate'>): Notice => {
@@ -1418,11 +1816,23 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  const deleteComplaint = (id: string) => {
+    setComplaints((prev) => prev.filter((c) => c.id !== id));
+    deleteDocFromFirestore('complaints', id);
+  };
+
   // Admissions
   const submitAdmissionApplication = (
     app: Omit<OnlineAdmissionApplication, 'id' | 'applicationNumber' | 'submittedAt' | 'status'>
   ) => {
-    const appNumber = `ADM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    let appNumber = '';
+    let attempt = 0;
+    do {
+      const randNum = Math.floor(1000 + Math.random() * 9000);
+      appNumber = `DA-2026-${randNum}`;
+      attempt++;
+    } while (admissionApplications.some((a) => a.applicationNumber === appNumber) && attempt < 100);
+
     const targetClass = classes.find((c) => c.id === app.applyingClassId);
     
     // Auto-resolve applicable monthly fee based on residential preference
@@ -1443,6 +1853,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       ...app,
       id: `app-${Date.now()}`,
       applicationNumber: appNumber,
+      paymentStatus: app.paymentStatus || 'unpaid',
       applicableMonthlyFee: resolvedMonthlyFee,
       admissionFee: resolvedAdmissionFee,
       submittedAt: new Date().toLocaleDateString('bn-BD'),
@@ -1497,7 +1908,25 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setStudents((prev) => prev.map((s) => (s.id === existingStudent!.id ? enrolledStudent : s)));
       saveDocToFirestore('students', enrolledStudent.id, enrolledStudent);
     } else {
-      const generatedId = `DA-2026-${Math.floor(100 + Math.random() * 900)}`;
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const hijriInfo = getHijriDate(now);
+      const enMonthName = now.toLocaleDateString('bn-BD', { month: 'long' });
+
+      let generatedId = '';
+      let idAttempt = 0;
+      do {
+        const randNum = Math.floor(100 + Math.random() * 900);
+        generatedId = `DA-${currentYear}-${randNum}`;
+        idAttempt++;
+      } while (students.some((s) => s.id === generatedId) && idAttempt < 100);
+
+      const randomPassword = Math.floor(100000 + Math.random() * 900000).toString();
+
+      const todayIso = now.toISOString().split('T')[0];
+      const admissionFeeAmount = targetApp.admissionFee || targetClass?.admissionFee || 3000;
+      const isFeePaidOnline = (targetApp.amountPaid || targetApp.admissionFeePaid || 0) > 0 && targetApp.paymentStatus === 'paid';
+
       enrolledStudent = {
         id: generatedId,
         institutionId: targetApp.institutionId,
@@ -1515,19 +1944,24 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         bloodGroup: targetApp.bloodGroup,
         residentialStatus: targetApp.residentialPreference,
         monthlyFee: finalMonthlyFee,
-        admissionFee: targetApp.admissionFee || targetClass?.admissionFee || 3000,
+        admissionFee: admissionFeeAmount,
+        admissionDate: todayIso,
+        admissionHijriMonth: hijriInfo.monthNameBn,
+        admissionHijriYear: hijriInfo.year,
+        admissionEnglishMonth: enMonthName,
+        admissionEnglishYear: currentYear,
         presentAddress: targetApp.presentAddress,
         permanentAddress: targetApp.permanentAddress,
         photoUrl: targetApp.photoUrl || `https://api.dicebear.com/7.x/micah/svg?seed=${encodeURIComponent(targetApp.applicantNameEnglish || 'student')}`,
         avatar: targetApp.photoUrl,
-        password: 'student123',
+        password: randomPassword,
       };
       setStudents((prev) => [...prev, enrolledStudent]);
       saveDocToFirestore('students', enrolledStudent.id, enrolledStudent);
 
-      // If admission fee was paid, auto-create a receipt in finance
-      if ((targetApp.amountPaid || targetApp.admissionFeePaid || 0) > 0 && targetApp.paymentStatus === 'paid') {
-        const receiptNo = `REC-ADM-${Math.floor(1000 + Math.random() * 9000)}`;
+      // Handle Admission Fee Record
+      const receiptNo = `REC-ADM-${Math.floor(1000 + Math.random() * 9000)}`;
+      if (isFeePaidOnline) {
         const admissionPayment: FeePayment = {
           id: `pay-adm-${Date.now()}`,
           receiptNo,
@@ -1538,7 +1972,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
           classId: targetApp.applyingClassId,
           feeType: 'admission',
           feeTypeLabel: 'ভর্তি ফি',
-          amount: targetApp.amountPaid || targetApp.admissionFeePaid || 3000,
+          amount: targetApp.amountPaid || targetApp.admissionFeePaid || admissionFeeAmount,
           month: 'ভর্তি সেশন ২০২৬',
           paymentDate: new Date().toLocaleDateString('bn-BD'),
           paymentMethod: (targetApp.paymentMethod as any) || 'bkash',
@@ -1548,6 +1982,33 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         };
         setFeePayments((prev) => [admissionPayment, ...prev]);
         saveDocToFirestore('fee_payments', admissionPayment.id, admissionPayment);
+
+        // Also auto-sync to financial transactions as income
+        const txn = createTransactionForFee(admissionPayment, 'অনলাইন ভর্তি অনুমোদন');
+        setFinancialTransactions((prev) => [txn, ...prev]);
+        saveDocToFirestore('financial_transactions', txn.id, txn);
+      } else {
+        // Create an unpaid admission invoice so student/admin ledger accurately tracks the admission fee obligation
+        const pendingAdmissionPayment: FeePayment = {
+          id: `pay-adm-due-${Date.now()}`,
+          receiptNo,
+          studentId: generatedId,
+          studentName: targetApp.applicantNameBangla,
+          studentNameBangla: targetApp.applicantNameBangla,
+          className: targetApp.applyingClassName,
+          classId: targetApp.applyingClassId,
+          feeType: 'admission',
+          feeTypeLabel: 'ভর্তি ফি (কাউন্টার প্রদেয়)',
+          amount: admissionFeeAmount,
+          month: 'ভর্তি সেশন ২০২৬',
+          paymentDate: new Date().toLocaleDateString('bn-BD'),
+          paymentMethod: 'cash',
+          transactionId: 'COUNTER-DUE',
+          status: 'pending',
+          notes: 'ভর্তি অনুমোদিত - অফিস কাউন্টারে ভর্তি ফি বকেয়া',
+        };
+        setFeePayments((prev) => [pendingAdmissionPayment, ...prev]);
+        saveDocToFirestore('fee_payments', pendingAdmissionPayment.id, pendingAdmissionPayment);
       }
     }
 
@@ -1594,6 +2055,11 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const deleteAdmissionApplication = (id: string) => {
+    setAdmissionApplications((prev) => prev.filter((a) => a.id !== id));
+    deleteDocFromFirestore('admission_applications', id);
+  };
+
   // Cloud multi-year sync function
   const syncAllToCloud = async () => {
     setCloudStatus('syncing');
@@ -1623,7 +2089,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.log('[Firestore] Full cloud sync completed successfully.');
     } catch (err) {
       console.error('[Firestore Error] Full cloud sync failed:', err);
-      setCloudStatus('synced');
+      setCloudStatus('offline');
     }
   };
 
@@ -1642,6 +2108,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         attendance,
         homework,
         feePayments,
+        financialTransactions,
         examResults,
         notices,
         mediaEvents,
@@ -1676,6 +2143,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (db.attendance) setAttendance(db.attendance);
       if (db.homework) setHomework(db.homework);
       if (db.feePayments) setFeePayments(db.feePayments);
+      if (db.financialTransactions) setFinancialTransactions(db.financialTransactions);
       if (db.examResults) setExamResults(db.examResults);
       if (db.notices) setNotices(db.notices);
       if (db.mediaEvents) setMediaEvents(db.mediaEvents);
@@ -1709,6 +2177,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setAttendance(initialAttendance);
     setHomework(initialHomework);
     setFeePayments(initialFeePayments);
+    setFinancialTransactions(initialFinancialTransactions);
     setExamResults(initialExamResults);
     setNotices(initialNotices);
     setMediaEvents(initialMediaEvents);
@@ -1720,6 +2189,33 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setThemeMode('light');
     setLanguage('bn');
     localStorage.clear();
+  };
+
+  const handleSetActivePublicTab = (tab: string) => {
+    setActivePublicTab(tab);
+    setCurrentRole('public');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSetActiveAdminTab = (tab: string) => {
+    setActiveAdminTab(tab);
+    if (isAdminLoggedIn) {
+      setCurrentRole('admin');
+    }
+  };
+
+  const handleSetActiveTeacherTab = (tab: string) => {
+    setActiveTeacherTab(tab);
+    if (currentTeacher) {
+      setCurrentRole('teacher');
+    }
+  };
+
+  const handleSetActiveStudentTab = (tab: string) => {
+    setActiveStudentTab(tab);
+    if (currentStudent) {
+      setCurrentRole('student');
+    }
   };
 
   return (
@@ -1737,13 +2233,13 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         currentTeacher,
         isAdminLoggedIn,
         activePublicTab,
-        setActivePublicTab,
+        setActivePublicTab: handleSetActivePublicTab,
         activeStudentTab,
-        setActiveStudentTab,
+        setActiveStudentTab: handleSetActiveStudentTab,
         activeTeacherTab,
-        setActiveTeacherTab,
+        setActiveTeacherTab: handleSetActiveTeacherTab,
         activeAdminTab,
-        setActiveAdminTab,
+        setActiveAdminTab: handleSetActiveAdminTab,
 
         institutions,
         updateInstitution,
@@ -1773,6 +2269,7 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         attendance,
         homework,
         feePayments,
+        financialTransactions,
         examResults,
         notices,
         mediaEvents,
@@ -1827,6 +2324,16 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (status === 'approved') approveFeePayment(id, 'অ্যাডমিন');
           else if (status === 'rejected') rejectFeePayment(id, 'প্রত্যাখ্যাত');
         },
+        deleteFeePayment,
+        clearAllFeePayments,
+
+        addFinancialTransaction,
+        updateFinancialTransaction,
+        deleteFinancialTransaction,
+        generateBulkSalaryVouchers,
+        payTeacherSalary,
+        clearAllFinancialTransactions,
+        clearAllFinancialData,
 
         addNotice,
         updateNotice,
@@ -1840,9 +2347,11 @@ export const MadrasaProvider: React.FC<{ children: React.ReactNode }> = ({ child
         replyComplaint: (id: string, resp: string, respName?: string, role: 'teacher' | 'admin' = 'admin') => {
           replyToComplaint(id, resp, role, respName || 'প্রশাসন');
         },
+        deleteComplaint,
         submitAdmissionApplication,
         updateAdmissionStatus,
         approveAdmissionApplication,
+        deleteAdmissionApplication,
 
         isComplaintsModalOpen,
         setIsComplaintsModalOpen,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
 import { Notice } from '../../types';
+import { printHtmlElement } from '../../utils/printHelper';
 import {
   Bell,
   Search,
@@ -29,7 +30,7 @@ export const PublicNotices: React.FC = () => {
   });
 
   const handlePrint = () => {
-    window.print();
+    printHtmlElement('public-notice-printable', { title: activeNoticeModal?.title || 'অফিসিয়াল নোটিশ' });
   };
 
   return (
@@ -146,8 +147,9 @@ export const PublicNotices: React.FC = () => {
       {activeNoticeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 my-8">
-            {/* Official Letterhead Header */}
-            <div className="bg-blue-900 text-white p-6 relative">
+            <div id="public-notice-printable" className="bg-white">
+              {/* Official Letterhead Header */}
+              <div className="bg-blue-900 text-white p-6 relative">
               <button
                 onClick={() => setActiveNoticeModal(null)}
                 className="absolute top-4 right-4 text-blue-200 hover:text-white p-1.5 rounded-full hover:bg-white/10"
@@ -207,6 +209,7 @@ export const PublicNotices: React.FC = () => {
                   <div className="text-slate-500">{madrasaInfo.nameBangla}</div>
                 </div>
               </div>
+            </div>
             </div>
 
             {/* Footer actions */}

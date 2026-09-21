@@ -27,6 +27,7 @@ import {
   Pencil,
   Layers,
   SlidersHorizontal,
+  MoreVertical,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -48,6 +49,7 @@ export const AdminResults: React.FC = () => {
   // Full Class Offline Result Tabulation Sheet / Batch Print Modal
   const [isTabulationModalOpen, setIsTabulationModalOpen] = useState(false);
   const [tabulationModalMode, setTabulationModalMode] = useState<'tabulation' | 'batch_marksheet'>('tabulation');
+  const [isMoreOptionsOpen, setIsMoreOptionsOpen] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -113,24 +115,24 @@ export const AdminResults: React.FC = () => {
     return { grade: 'F', arabic: 'রাসিব (অনুত্তীর্ণ)', gpa: 0.0 };
   };
 
-  // Helper to load kitabs for a specific class
+  // Helper to load kitabs for a specific class (starting with empty/0 marks)
   const loadKitabsForClass = (clsId: string) => {
     const targetCls = classes.find((c) => c.id === clsId);
     if (targetCls && targetCls.kitabs && targetCls.kitabs.length > 0) {
       return targetCls.kitabs.map((k) => ({
         subjectName: k.name,
         fullMarks: k.fullMarks || 100,
-        obtainedMarks: Math.floor((k.fullMarks || 100) * 0.85),
+        obtainedMarks: 0,
         passMarks: k.passMarks || 40,
       }));
     }
     return [
-      { subjectName: 'এসো আরবি শিখি', fullMarks: 100, obtainedMarks: 85, passMarks: 40 },
-      { subjectName: 'মিফতাহুল আরাবিয়্যাহ', fullMarks: 100, obtainedMarks: 85, passMarks: 40 },
-      { subjectName: 'আত-তামরীনুল কিতাবী', fullMarks: 100, obtainedMarks: 85, passMarks: 40 },
-      { subjectName: 'এসো কুরআন শিখি ও তাজবীদ', fullMarks: 100, obtainedMarks: 90, passMarks: 40 },
-      { subjectName: 'বাংলা সাহিত্য ও ব্যাকরণ', fullMarks: 100, obtainedMarks: 80, passMarks: 40 },
-      { subjectName: 'সাধারণ গণিত ও ইংরেজি', fullMarks: 100, obtainedMarks: 80, passMarks: 40 },
+      { subjectName: 'এসো আরবি শিখি', fullMarks: 100, obtainedMarks: 0, passMarks: 40 },
+      { subjectName: 'মিফতাহুল আরাবিয়্যাহ', fullMarks: 100, obtainedMarks: 0, passMarks: 40 },
+      { subjectName: 'আত-তামরীনুল কিতাবী', fullMarks: 100, obtainedMarks: 0, passMarks: 40 },
+      { subjectName: 'এসো কুরআন শিখি ও তাজবীদ', fullMarks: 100, obtainedMarks: 0, passMarks: 40 },
+      { subjectName: 'বাংলা সাহিত্য ও ব্যাকরণ', fullMarks: 100, obtainedMarks: 0, passMarks: 40 },
+      { subjectName: 'সাধারণ গণিত ও ইংরেজি', fullMarks: 100, obtainedMarks: 0, passMarks: 40 },
     ];
   };
 
@@ -190,18 +192,56 @@ export const AdminResults: React.FC = () => {
       return;
     }
 
+    // Duplicate guard: Prevent duplicate result for same studentId + examType + classId
+    const isDuplicate = examResults.some(
+      (r) =>
+        r.id !== editingResultId &&
+        r.studentId.trim().toLowerCase() === studentId.trim().toLowerCase() &&
+        r.classId === modalClassId &&
+        (r.examType === selectedExamType || (r.examName && r.examName.trim().toLowerCase() === examName.trim().toLowerCase()))
+    );
+
+    if (isDuplicate) {
+      alert('এই শিক্ষার্থীর জন্য এই জামাতে এই পরীক্ষার ফলাফল ইতিমধ্যে এন্ট্রি করা হয়েছে!');
+      return;
+    }
+
+    // Validate manual rank (1..N and unique)
+    if (rankingMode === 'manual') {
+      const rankNum = Number(manualPositionInClass);
+      if (!rankNum || isNaN(rankNum) || rankNum < 1 || !Number.isInteger(rankNum)) {
+        alert('কাস্টম মেধাস্থান অবশ্যই ১ থেকে শুরু করে একটি ধনাত্মক পূর্ণসংখ্যা হতে হবে।');
+        return;
+      }
+      const isRankTaken = examResults.some(
+        (r) =>
+          r.id !== editingResultId &&
+          r.classId === modalClassId &&
+          (r.examType === selectedExamType || (r.examName && r.examName.trim().toLowerCase() === examName.trim().toLowerCase())) &&
+          r.positionInClass === rankNum
+      );
+      if (isRankTaken) {
+        alert(`মেধাস্থান ${rankNum} ইতিমধ্যে এই জামাত ও পরীক্ষায় অন্য শিক্ষার্থীর জন্য নির্ধারিত রয়েছে। অনুগ্রহ করে অনন্য (unique) স্থান নির্ধারণ করুন।`);
+        return;
+      }
+    }
+
     const targetStudent = students.find((s) => s.id === studentId);
     const selClass = classes.find((c) => c.id === modalClassId);
 
     const calculatedSubjects = subjectsList.map((sub) => {
       const { grade, arabic, gpa } = calculateSubjectGrade(sub.obtainedMarks, sub.fullMarks);
+      const isPassed = sub.obtainedMarks >= (sub.passMarks !== undefined ? sub.passMarks : 40) && grade !== 'F';
       return {
         ...sub,
         grade,
         arabicGrade: arabic,
         gpa,
+        isPassed,
       };
     });
+
+    const isPassedAll = calculatedSubjects.every((s) => s.isPassed !== false && s.grade !== 'F');
 
     const totalPossible = calculatedSubjects.reduce((a, b) => a + b.fullMarks, 0);
     const totalObtained = calculatedSubjects.reduce((a, b) => a + b.obtainedMarks, 0);
@@ -211,16 +251,17 @@ export const AdminResults: React.FC = () => {
         ? calculatedSubjects.reduce((a, b) => a + b.gpa, 0) / calculatedSubjects.length
         : 0;
 
-    const overall =
-      percentage >= 80
-        ? { grade: 'A+', arabic: 'মুমতাজ (স্টার)' }
-        : percentage >= 70
-        ? { grade: 'A', arabic: 'জাইয়্যিদ জিদ্দান (১ম বিভাগ)' }
-        : percentage >= 60
-        ? { grade: 'A-', arabic: 'জাইয়্যিদ (২য় বিভাগ)' }
-        : percentage >= 40
-        ? { grade: 'B', arabic: 'মাকবুল (৩য় বিভাগ)' }
-        : { grade: 'F', arabic: 'রাসিব (অকৃতকার্য)' };
+    const overall = !isPassedAll
+      ? { grade: 'F', arabic: 'রাসিব (অকৃতকার্য)' }
+      : percentage >= 80
+      ? { grade: 'A+', arabic: 'মুমতাজ (স্টার)' }
+      : percentage >= 70
+      ? { grade: 'A', arabic: 'জাইয়্যিদ জিদ্দান (১ম বিভাগ)' }
+      : percentage >= 60
+      ? { grade: 'A-', arabic: 'জাইয়্যিদ (২য় বিভাগ)' }
+      : percentage >= 40
+      ? { grade: 'B', arabic: 'মাকবুল (৩য় বিভাগ)' }
+      : { grade: 'F', arabic: 'রাসিব (অকৃতকার্য)' };
 
     const finalPosition =
       rankingMode === 'manual'
@@ -242,6 +283,7 @@ export const AdminResults: React.FC = () => {
       percentage,
       overallGrade: overall.grade,
       overallArabicGrade: overall.arabic,
+      isPassedAll,
       cgpa: avgGpa,
       positionInClass: finalPosition,
       isManualPosition: rankingMode === 'manual',
@@ -282,62 +324,99 @@ export const AdminResults: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {/* 1. Offline Class Tabulation Broadsheet */}
-            <button
-              onClick={() => {
-                setTabulationModalMode('tabulation');
-                setIsTabulationModalOpen(true);
-              }}
-              className="bg-indigo-900 hover:bg-indigo-950 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-              title="নির্দিষ্ট জামাতের সকল শিক্ষার্থীর বিষয়ভিত্তিক পূর্ণাঙ্গ ফলাফল ও ট্যাবুলেশন শিট অফলাইনে প্রিন্ট করুন"
-            >
-              <Layers className="w-4 h-4 text-amber-300" />
-              <span>জামাতের ট্যাবুলেশন শিট</span>
-            </button>
-
-            {/* 2. Offline Batch Marksheets Print */}
-            <button
-              onClick={() => {
-                setTabulationModalMode('batch_marksheet');
-                setIsTabulationModalOpen(true);
-              }}
-              className="bg-blue-800 hover:bg-blue-900 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-              title="নির্দিষ্ট জামাতের সকল শিক্ষার্থীর ব্যক্তিগত মার্কশিট একসাথে অফলাইনে প্রিন্ট করুন"
-            >
-              <Printer className="w-4 h-4 text-amber-300" />
-              <span>সব মার্কশিট প্রিন্ট</span>
-            </button>
-
-            <button
-              onClick={() => {
-                const count = recalculateAllMeritPositions();
-                confetti({ particleCount: 40, spread: 50, origin: { y: 0.5 } });
-                showToast(`সফলভাবে ${count}টি পরীক্ষার ফলাফলের মেধাস্থান (১ম, ২য়, ৩য়...) প্রাপ্ত নম্বরের ভিত্তিতে স্বয়ংক্রিয়ভাবে নির্ধারণ করা হয়েছে!`);
-              }}
-              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-              title="সকল শ্রেণির শিক্ষার্থীদের প্রাপ্ত নম্বরের ভিত্তিতে মেধাস্থান (১ম, ২য়, ৩য়...) স্বয়ংক্রিয়ভাবে নির্ধারণ করুন"
-            >
-              <Sparkles className="w-4 h-4 text-slate-950" />
-              <span>অটো মেধাস্থান নির্ধারণ</span>
-            </button>
-
-            <button
-              onClick={() => exportResultsToExcel(examResults)}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-              title="সকল ফলাফল এক্সেলে ডাউনলোড করুন"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-amber-300" />
-              <span>ফলাফল এক্সেল</span>
-            </button>
-
+          <div className="flex items-center gap-2">
             <button
               onClick={handleOpenAdd}
-              className="bg-blue-900 hover:bg-blue-950 text-white font-bold px-4 py-2.5 rounded-2xl text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+              className="bg-blue-900 hover:bg-blue-950 text-white font-bold px-4 py-2.5 rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center gap-2 cursor-pointer shrink-0"
             >
               <Plus className="w-4 h-4" />
               <span>নতুন ফলাফল এন্ট্রি</span>
             </button>
+
+            {/* Three-Dot Menu for Tabulation, Batch Print, Merit Calc & Excel */}
+            <div className="relative">
+              <button
+                id="results-more-options-btn"
+                onClick={() => setIsMoreOptionsOpen((prev) => !prev)}
+                className="bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 px-3 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                title="আরও রিপোর্ট ও অপশন"
+              >
+                <MoreVertical className="w-4 h-4 text-slate-700" />
+                <span className="hidden sm:inline">রিপোর্ট ও অপশন</span>
+              </button>
+
+              {isMoreOptionsOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsMoreOptionsOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-72 bg-white text-slate-800 border border-slate-200 rounded-2xl shadow-2xl p-2 z-50 space-y-1.5 text-xs animate-in fade-in zoom-in-95">
+                    <button
+                      onClick={() => {
+                        setTabulationModalMode('tabulation');
+                        setIsTabulationModalOpen(true);
+                        setIsMoreOptionsOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-indigo-50 text-indigo-900 transition text-left cursor-pointer"
+                    >
+                      <Layers className="w-4 h-4 text-indigo-700 shrink-0" />
+                      <div>
+                        <div className="font-bold">জামাতের ট্যাবুলেশন শিট</div>
+                        <div className="text-[11px] text-slate-500">সকল শিক্ষার্থীর পূর্ণাঙ্গ ফলাফল ব্রডশিট প্রিন্ট</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setTabulationModalMode('batch_marksheet');
+                        setIsTabulationModalOpen(true);
+                        setIsMoreOptionsOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-blue-50 text-blue-900 transition text-left cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4 text-blue-700 shrink-0" />
+                      <div>
+                        <div className="font-bold">সব মার্কশিট এক ক্লিকে প্রিন্ট</div>
+                        <div className="text-[11px] text-slate-500">একসাথে সকল শিক্ষার্থীর মার্কশিট প্রিন্ট করুন</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsMoreOptionsOpen(false);
+                        const count = recalculateAllMeritPositions();
+                        confetti({ particleCount: 40, spread: 50, origin: { y: 0.5 } });
+                        showToast(`সফলভাবে ${count}টি পরীক্ষার ফলাফলের মেধাস্থান স্বয়ংক্রিয়ভাবে নির্ধারণ করা হয়েছে!`);
+                      }}
+                      className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-amber-50 text-amber-900 transition text-left cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                      <div>
+                        <div className="font-bold">অটো মেধাস্থান নির্ধারণ</div>
+                        <div className="text-[11px] text-slate-500">প্রাপ্ত নম্বরের ভিত্তিতে ১ম, ২য়, ৩য় নির্ধারণ</div>
+                      </div>
+                    </button>
+
+                    <div className="pt-1 border-t border-slate-100">
+                      <button
+                        onClick={() => {
+                          setIsMoreOptionsOpen(false);
+                          exportResultsToExcel(examResults);
+                        }}
+                        className="w-full flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-emerald-50 text-emerald-900 transition text-left cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <div>
+                          <div className="font-bold">ফলাফল এক্সেল ডাউনলোড</div>
+                          <div className="text-[11px] text-slate-500">এক্সেল ফাইলে সব রেজাল্ট ব্যাকআপ</div>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 

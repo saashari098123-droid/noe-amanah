@@ -12,17 +12,16 @@ import {
   ChevronRight,
   ShieldCheck,
   Award,
-  Palette,
 } from 'lucide-react';
 
-export const Footer: React.FC = () => {
+export const Footer: React.FC<{ onOpenLogin?: (defaultTab?: 'student' | 'teacher' | 'admin') => void }> = ({ onOpenLogin }) => {
   const {
     madrasaInfo,
     setActivePublicTab,
     currentRole,
-    quickSwitchRole,
+    isAdminLoggedIn,
+    setActiveAdminTab,
     themePreset,
-    setIsThemeSelectorOpen,
   } = useMadrasa();
 
   return (
@@ -71,7 +70,6 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    quickSwitchRole('public');
                     setActivePublicTab('about');
                   }}
                   className="hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
@@ -83,7 +81,6 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    quickSwitchRole('public');
                     setActivePublicTab('departments');
                   }}
                   className="hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
@@ -95,7 +92,6 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    quickSwitchRole('public');
                     setActivePublicTab('admission');
                   }}
                   className="hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
@@ -107,7 +103,6 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    quickSwitchRole('public');
                     setActivePublicTab('notices');
                   }}
                   className="hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
@@ -119,7 +114,6 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    quickSwitchRole('public');
                     setActivePublicTab('results');
                   }}
                   className="hover:text-amber-300 transition flex items-center gap-1.5 cursor-pointer"
@@ -173,16 +167,6 @@ export const Footer: React.FC = () => {
                 <span>{madrasaInfo.email}</span>
               </div>
             </div>
-
-            <div className="mt-4 pt-3 border-t border-white/10">
-              <button
-                onClick={() => setIsThemeSelectorOpen(true)}
-                className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-2 px-3 rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer border border-white/15"
-              >
-                <Palette className="w-3.5 h-3.5 text-amber-400" />
-                ডিজাইন পরিবর্তন করুন (৫টি অপশন)
-              </button>
-            </div>
           </div>
         </div>
 
@@ -192,13 +176,25 @@ export const Footer: React.FC = () => {
             © {new Date().getFullYear()} {madrasaInfo.nameBangla}। সর্বস্বত্ব সংরক্ষিত।
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => quickSwitchRole('admin')}
-              className="text-slate-400 hover:text-amber-300 transition flex items-center gap-1 cursor-pointer"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              অ্যাডমিন পোর্টাল
-            </button>
+            {isAdminLoggedIn ? (
+              <button
+                onClick={() => {
+                  setActiveAdminTab('dashboard');
+                }}
+                className="text-slate-400 hover:text-amber-300 transition flex items-center gap-1 cursor-pointer font-medium"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                অ্যাডমিন ড্যাশবোর্ড
+              </button>
+            ) : (
+              <button
+                onClick={() => onOpenLogin?.('admin')}
+                className="text-slate-400 hover:text-amber-300 transition flex items-center gap-1 cursor-pointer font-medium"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                অ্যাডমিন পোর্টাল লগইন
+              </button>
+            )}
             <span>•</span>
             <span className="text-slate-400">এডুকেশন ম্যানেজমেন্ট সিস্টেম</span>
           </div>

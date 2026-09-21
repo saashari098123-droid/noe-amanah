@@ -10,12 +10,17 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Banknote,
 } from 'lucide-react';
 
 export const TeacherOverview: React.FC = () => {
   const { currentTeacher, classes, students, attendance, homework, complaints, setActiveTeacherTab } = useMadrasa();
 
   if (!currentTeacher) return null;
+
+  // Local today date helper
+  const d = new Date();
+  const todayDateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   // Filter assigned classes
   const assignedClassesList = classes.filter((c) => currentTeacher.assignedClasses.includes(c.id));
@@ -113,8 +118,12 @@ export const TeacherOverview: React.FC = () => {
             {assignedClassesList.map((cls) => {
               const clsStudents = students.filter((s) => s.classId === cls.id);
               const presentCount = clsStudents.filter((s) => {
-                const att = attendance.find((a) => a.studentId === s.id);
-                return att?.status === 'present' || !att;
+                const normId = s.id.trim().toLowerCase();
+                const todayRecs = attendance.filter(
+                  (a) => a.studentId?.trim().toLowerCase() === normId && a.date === todayDateStr
+                );
+                if (todayRecs.length === 0) return true;
+                return !todayRecs.some((r) => r.status === 'absent');
               }).length;
               const absentCount = clsStudents.length - presentCount;
 
@@ -158,6 +167,26 @@ export const TeacherOverview: React.FC = () => {
               className="w-full bg-amber-400 hover:bg-amber-500 text-slate-950 font-bold py-2.5 rounded-xl text-xs transition"
             >
               নতুন হোমওয়ার্ক যোগ করুন →
+            </button>
+          </div>
+
+          <div className="bg-gradient-to-br from-emerald-900 to-teal-950 text-white rounded-3xl p-6 shadow-md border border-emerald-700/50 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center shrink-0 font-bold">
+                <Banknote className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-white">মাসিক হাদিয়া ও পে-স্লিপ</h4>
+                <p className="text-[11px] text-emerald-200">
+                  নির্ধারিত হাদিয়া: ৳ {(currentTeacher.salary || 18000).toLocaleString('bn-BD')}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTeacherTab('salary')}
+              className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs transition border border-emerald-500/40 cursor-pointer shadow-xs"
+            >
+              হাদিয়া রেজিস্টার ও পে-স্লিপ দেখুন →
             </button>
           </div>
 

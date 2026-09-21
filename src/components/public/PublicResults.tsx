@@ -1,123 +1,195 @@
 import React, { useState } from 'react';
 import { useMadrasa } from '../../context/MadrasaContext';
-import { ExamResult } from '../../types';
+import { ExamResult, Student } from '../../types';
 import { getOrdinalBangla } from '../../utils/meritCalculator';
+import { printHtmlElement } from '../../utils/printHelper';
 import {
   Award,
   Search,
   Printer,
-  User,
   GraduationCap,
-  Sparkles,
-  FileCheck,
   X,
   Eye,
+  ShieldCheck,
+  AlertCircle,
+  Phone,
+  Calendar,
+  BookOpen,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const PublicResults: React.FC = () => {
   const { examResults, classes, madrasaInfo, students } = useMadrasa();
 
-  const [searchMethod, setSearchMethod] = useState<'classRoll' | 'id'>('classRoll');
+  const [searchMethod, setSearchMethod] = useState<'id' | 'classRoll'>('id');
   const [studentIdInput, setStudentIdInput] = useState('');
+  const [guardianPhoneInput, setGuardianPhoneInput] = useState('');
   const [selectedClassId, setSelectedClassId] = useState(classes[0]?.id || '');
   const [selectedExamType, setSelectedExamType] = useState('all');
 
+  // Verification and Results state
+  const [verifiedStudent, setVerifiedStudent] = useState<Student | null>(null);
+  const [matchedResultsList, setMatchedResultsList] = useState<ExamResult[]>([]);
   const [searchedResult, setSearchedResult] = useState<ExamResult | null>(null);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [noResultsMessage, setNoResultsMessage] = useState<string | null>(null);
 
-  // Students belonging to the currently selected class
-  const classStudents = students.filter((s) => s.classId === selectedClassId);
+  // Quick Verification Modal when selecting from Class List
+  const [selectedStudentForVerification, setSelectedStudentForVerification] = useState<Student | null>(null);
+  const [modalPhoneInput, setModalPhoneInput] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
 
-  const handleSearchById = (e: React.FormEvent) => {
-    e.preventDefault();
-    setHasSearched(true);
-    const match = examResults.find(
-      (r) =>
-        r.studentId.trim().toUpperCase() === studentIdInput.trim().toUpperCase() &&
-        (selectedExamType === 'all' || r.examType === selectedExamType)
-    );
-    setSearchedResult(match || null);
+  // Helper to normalize phone numbers (convert Bangla digits to English and strip non-digits)
+  const normalizePhone = (str?: string): string => {
+    if (!str) return '';
+    const bnToEnMap: Record<string, string> = {
+      '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4',
+      '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9',
+    };
+    const converted = str.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d);
+    return converted.replace(/\D/g, '');
   };
 
-  const handleSelectStudent = (student: typeof students[0]) => {
-    setHasSearched(true);
-    const match = examResults.find(
+  const verifyStudentAndPhone = (studentId: string, phone: string): { student?: Student; error?: string } => {
+    const cleanId = studentId.trim().toUpperCase();
+    const inputDigits = normalizePhone(phone);
+
+    if (!cleanId) {
+      return { error: 'অনুগ্রহ করে ছাত্র আইডি প্রদান করুন।' };
+    }
+    if (!inputDigits || inputDigits.length < 6) {
+      return { error: 'অনুগ্রহ করে শিক্ষার্থীর নিবন্ধিত অভিভাবকের মোবাইল নম্বর (কমপক্ষে ৬ ডিজিট) প্রদান করুন।' };
+    }
+
+    const student = students.find((s) => s.id.trim().toUpperCase() === cleanId);
+    if (!student) {
+      return { error: `ছাত্র আইডি "${studentId}" পাওয়া যায়নি! সঠিক আইডি দিন।` };
+    }
+
+    const guardianDigits = normalizePhone(student.guardianPhone);
+    const studentDigits = normalizePhone(student.phone);
+
+    const isMatch =
+      (guardianDigits && (guardianDigits === inputDigits || guardianDigits.endsWith(inputDigits) || inputDigits.endsWith(guardianDigits))) ||
+      (studentDigits && (studentDigits === inputDigits || studentDigits.endsWith(inputDigits) || inputDigits.endsWith(studentDigits)));
+
+    if (!isMatch) {
+      return {
+        error: 'ছাত্র আইডি অথবা অভিভাবকের মোবাইল নম্বর মেলেনি! সঠিক নিবন্ধিত মোবাইল নম্বর দিন।',
+      };
+    }
+
+    return { student };
+  };
+
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setSearchError(null);
+    setNoResultsMessage(null);
+    setMatchedResultsList([]);
+    setSearchedResult(null);
+
+    const verification = verifyStudentAndPhone(studentIdInput, guardianPhoneInput);
+    if (verification.error) {
+      setSearchError(verification.error);
+      return;
+    }
+
+    const student = verification.student!;
+    setVerifiedStudent(student);
+
+    // Look up real published results for this student
+    const matches = examResults.filter(
       (r) =>
-        r.studentId === student.id &&
+        r.studentId.trim().toUpperCase() === student.id.trim().toUpperCase() &&
         (selectedExamType === 'all' || r.examType === selectedExamType)
     );
-    if (match) {
-      setSearchedResult(match);
+
+    if (matches.length === 0) {
+      setNoResultsMessage(`শিক্ষার্থী ${student.nameBangla} (আইডি: ${student.id})-এর জন্য কোনো ফলাফল প্রকাশিত হয়নি।`);
+      return;
+    }
+
+    if (matches.length === 1) {
+      setSearchedResult(matches[0]);
+      setMatchedResultsList(matches);
     } else {
-      // Create a clean on-the-fly result preview if not yet published
-      const targetCls = classes.find((c) => c.id === student.classId);
-      const subjects = targetCls?.kitabs?.map((k, idx) => ({
-        subjectName: k.name,
-        fullMarks: k.fullMarks || 100,
-        obtainedMarks: 85 - idx * 2,
-        grade: 'A+',
-        arabicGrade: 'মুমতাজ (সর্বোচ্চ)',
-        gpa: 5.0,
-      })) || [
-        { subjectName: 'সাধারণ শিক্ষা ও কুরআন', fullMarks: 100, obtainedMarks: 88, grade: 'A+', arabicGrade: 'মুমতাজ', gpa: 5.0 }
-      ];
-
-      const totalMarks = subjects.reduce((sum, s) => sum + s.obtainedMarks, 0);
-      const fullMarks = subjects.reduce((sum, s) => sum + s.fullMarks, 0);
-
-      setSearchedResult({
-        id: `auto-${student.id}`,
-        studentId: student.id,
-        studentName: student.nameBangla,
-        className: student.className,
-        classId: student.classId,
-        roll: student.roll,
-        year: 2026,
-        examType: 'first_term',
-        examName: '১ম সাময়িক পরীক্ষা ২০২৬',
-        subjects,
-        totalMarksObtained: totalMarks,
-        totalMarksPossible: fullMarks,
-        percentage: (totalMarks / fullMarks) * 100,
-        overallGrade: 'A+',
-        overallArabicGrade: 'মুমতাজ (সর্বোচ্চ)',
-        cgpa: 5.0,
-        positionInClass: student.roll,
-        generalRemarks: 'মাশাআল্লাহ, ক্লাসে অত্যন্ত নিয়মিত ও পরীক্ষায় চমৎকার ফলাফল অর্জন করেছে।',
-        publishDate: '২০২৬-০৩-১৫',
-      });
+      // Multiple exam results available: let user choose
+      setMatchedResultsList(matches);
     }
   };
 
-  const handleCloseResult = () => {
+  const handleVerifyModalSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForVerification) return;
+
+    setModalError(null);
+    const verification = verifyStudentAndPhone(selectedStudentForVerification.id, modalPhoneInput);
+    if (verification.error) {
+      setModalError(verification.error);
+      return;
+    }
+
+    const student = verification.student!;
+    setSelectedStudentForVerification(null);
+    setModalPhoneInput('');
+    setStudentIdInput(student.id);
+    setGuardianPhoneInput(modalPhoneInput);
+    setVerifiedStudent(student);
+    setSearchError(null);
+    setNoResultsMessage(null);
+
+    const matches = examResults.filter(
+      (r) =>
+        r.studentId.trim().toUpperCase() === student.id.trim().toUpperCase() &&
+        (selectedExamType === 'all' || r.examType === selectedExamType)
+    );
+
+    if (matches.length === 0) {
+      setNoResultsMessage(`শিক্ষার্থী ${student.nameBangla} (আইডি: ${student.id})-এর জন্য কোনো ফলাফল প্রকাশিত হয়নি।`);
+      setMatchedResultsList([]);
+      setSearchedResult(null);
+    } else if (matches.length === 1) {
+      setSearchedResult(matches[0]);
+      setMatchedResultsList(matches);
+    } else {
+      setMatchedResultsList(matches);
+      setSearchedResult(null);
+    }
+  };
+
+  const handleCloseMarksheet = () => {
     setSearchedResult(null);
-    setHasSearched(false);
   };
 
   const handlePrint = () => {
-    window.print();
+    printHtmlElement('public-result-marksheet-printable', {
+      title: `মার্কশিট - ${searchedResult?.studentName || 'ফলাফল'} (${searchedResult?.examName || ''})`,
+    });
   };
+
+  const classStudents = students.filter((s) => s.classId === selectedClassId);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-      {/* Header */}
+      {/* Header Banner */}
       <div className="bg-gradient-to-r from-blue-900 via-teal-950 to-slate-900 text-white rounded-3xl p-8 sm:p-10 shadow-xl text-center">
-        <span className="text-xs text-amber-300 font-bold uppercase tracking-widest bg-blue-800/80 px-3 py-1 rounded-full">
-          ফলাফল প্রকাশনা পোর্টাল
+        <span className="text-xs text-amber-300 font-bold uppercase tracking-widest bg-blue-800/80 px-3 py-1 rounded-full border border-amber-400/30">
+          অফিসিয়াল ফলাফল প্রকাশনা পোর্টাল
         </span>
         <h1 className="text-3xl sm:text-4xl font-extrabold mt-3">
-          প্রতিষ্ঠানের পরীক্ষার ফলাফল ও মার্কশিট
+          পরীক্ষার ফলাফল ও একাডেমিক ট্রান্সক্রিপ্ট
         </h1>
         <p className="text-xs sm:text-sm text-blue-200 mt-2 max-w-xl mx-auto">
-          জামাত নির্বাচন করে শিক্ষার্থীদের তালিকা থেকে রোল/নাম ক্লিক করুন অথবা ছাত্র আইডি দিয়ে সরাসরি অফিশিয়াল মার্কশিট দেখুন।
+          গোপনীয়তা ও নিরাপত্তার স্বার্থে ছাত্র আইডি এবং নিবন্ধিত অভিভাবকের মোবাইল নম্বর প্রদান করে ফলাফল ও মার্কশিট অনুসন্ধান করুন।
         </p>
       </div>
 
-      {/* Result Display Overlay / Marksheet Modal with Top Close 'X' Button */}
+      {/* Marksheet Modal Overlay */}
       {searchedResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[94vh] flex flex-col shadow-2xl border border-blue-200 my-auto overflow-hidden animate-in fade-in zoom-in-95">
-            {/* Modal Top Header with Prominent Close Button */}
+            {/* Modal Top Header */}
             <div className="bg-blue-950 text-white px-6 py-4 flex items-center justify-between shrink-0 border-b border-blue-800">
               <div className="flex items-center gap-2.5">
                 <Award className="w-5 h-5 text-amber-300" />
@@ -127,20 +199,19 @@ export const PublicResults: React.FC = () => {
                 </div>
               </div>
 
-              {/* Close Button 'X' on top */}
+              {/* Close Button 'X' */}
               <button
                 type="button"
-                onClick={handleCloseResult}
-                className="bg-white/10 hover:bg-rose-600 text-white p-2 rounded-full transition cursor-pointer flex items-center justify-center shadow-xs"
-                title="বন্ধ করুন (Close)"
-                aria-label="বন্ধ করুন"
+                onClick={handleCloseMarksheet}
+                className="bg-white/10 hover:bg-rose-600 text-white p-2 rounded-full transition cursor-pointer flex items-center justify-center"
+                title="বন্ধ করুন"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Marksheet Content */}
-            <div className="p-6 sm:p-8 space-y-6 text-xs overflow-y-auto flex-1 bg-white">
+            <div id="public-result-marksheet-printable" className="p-6 sm:p-8 space-y-6 text-xs overflow-y-auto flex-1 bg-white">
               {/* Institution Header in Marksheet */}
               <div className="text-center border-b-2 border-blue-800 pb-4">
                 <div className="font-['Amiri'] text-blue-800 text-sm">{madrasaInfo.nameArabic}</div>
@@ -170,7 +241,7 @@ export const PublicResults: React.FC = () => {
                 <div>
                   <span className="text-slate-400 block text-[10px]">রোল ও মেধাক্রম:</span>
                   <span className="font-bold text-blue-700">
-                    রোল: {searchedResult.roll} (মেধা স্থান: {getOrdinalBangla(searchedResult.positionInClass)} স্থান)
+                    রোল: {searchedResult.roll} {searchedResult.positionInClass ? `(মেধা স্থান: ${getOrdinalBangla(searchedResult.positionInClass)} স্থান)` : ''}
                   </span>
                 </div>
               </div>
@@ -223,11 +294,13 @@ export const PublicResults: React.FC = () => {
                 </table>
               </div>
 
-              {/* Remarks (Excluded on paper print) */}
-              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 text-xs text-slate-700 no-print print:hidden">
-                <span className="font-bold text-blue-900 block mb-1">মুহতামিম ও শিক্ষকের মূল্যায়ন:</span>
-                <p className="italic">"{searchedResult.generalRemarks}"</p>
-              </div>
+              {/* Remarks */}
+              {searchedResult.generalRemarks && (
+                <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 text-xs text-slate-700 no-print print:hidden">
+                  <span className="font-bold text-blue-900 block mb-1">মুহতামিম ও শিক্ষকের মূল্যায়ন:</span>
+                  <p className="italic">"{searchedResult.generalRemarks}"</p>
+                </div>
+              )}
 
               {/* Signature section */}
               <div className="pt-6 grid grid-cols-3 text-center text-xs text-slate-500 border-t border-slate-200">
@@ -246,15 +319,15 @@ export const PublicResults: React.FC = () => {
               </div>
             </div>
 
-            {/* Bottom Actions with both Close and Print */}
+            {/* Bottom Actions */}
             <div className="p-4 px-6 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0">
               <button
                 type="button"
-                onClick={handleCloseResult}
+                onClick={handleCloseMarksheet}
                 className="px-4 py-2 rounded-xl text-slate-700 hover:bg-slate-200 border border-slate-300 font-bold text-xs transition cursor-pointer flex items-center gap-1.5"
               >
                 <X className="w-4 h-4" />
-                ফলাফল প্রদর্শন বন্ধ করুন (Close)
+                ফলাফল প্রদর্শন বন্ধ করুন
               </button>
 
               <button
@@ -270,9 +343,84 @@ export const PublicResults: React.FC = () => {
         </div>
       )}
 
-      {/* Search Filter Controls */}
+      {/* Modal for Guardian Verification from Class List */}
+      {selectedStudentForVerification && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-blue-800" />
+                <h3 className="font-bold text-slate-900 text-sm">অভিভাবক ভেরিফিকেশন</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedStudentForVerification(null);
+                  setModalError(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-blue-50/70 p-3.5 rounded-2xl border border-blue-100 text-xs text-slate-700 space-y-1">
+              <div className="font-bold text-blue-900 text-sm">{selectedStudentForVerification.nameBangla}</div>
+              <div className="text-slate-600">আইডি: <span className="font-mono font-bold">{selectedStudentForVerification.id}</span> | জামাত: {selectedStudentForVerification.className}</div>
+            </div>
+
+            <form onSubmit={handleVerifyModalSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  নিবন্ধিত অভিভাবকের মোবাইল নম্বর দিন *
+                </label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    value={modalPhoneInput}
+                    onChange={(e) => setModalPhoneInput(e.target.value)}
+                    placeholder="যেমন: 01711223344"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">ভর্তি ফরমে দেওয়া অভিভাবকের মোবাইল নম্বর প্রবেশ করুন।</p>
+              </div>
+
+              {modalError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{modalError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStudentForVerification(null);
+                    setModalError(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100 transition"
+                >
+                  বাতিল
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-blue-800 hover:bg-blue-900 text-white font-bold text-xs shadow-md transition"
+                >
+                  মার্কশিট দেখুন
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Main Search Panel */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-md border border-slate-200 space-y-6">
-        {/* Exam Type Filter */}
+        {/* Method Toggle and Exam Filter */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">পরীক্ষার ধরন নির্বাচন:</label>
@@ -294,27 +442,92 @@ export const PublicResults: React.FC = () => {
             <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
               <button
                 type="button"
-                onClick={() => setSearchMethod('classRoll')}
+                onClick={() => {
+                  setSearchMethod('id');
+                  setSearchError(null);
+                  setNoResultsMessage(null);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  searchMethod === 'id' ? 'bg-white text-blue-950 shadow-xs' : 'text-slate-600'
+                }`}
+              >
+                ছাত্র আইডি ও ফোন দিয়ে সার্চ
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchMethod('classRoll');
+                  setSearchError(null);
+                  setNoResultsMessage(null);
+                }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
                   searchMethod === 'classRoll' ? 'bg-white text-blue-950 shadow-xs' : 'text-slate-600'
                 }`}
               >
                 শ্রেণি ও তালিকা অনুযায়ী
               </button>
-              <button
-                type="button"
-                onClick={() => setSearchMethod('id')}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
-                  searchMethod === 'id' ? 'bg-white text-blue-950 shadow-xs' : 'text-slate-600'
-                }`}
-              >
-                ছাত্র আইডি দিয়ে সার্চ
-              </button>
             </div>
           </div>
         </div>
 
-        {/* Method 1: Class & Student List Browser */}
+        {/* Method 1: Search By Student ID & Guardian Phone */}
+        {searchMethod === 'id' && (
+          <form onSubmit={handleSearch} className="pt-2 max-w-lg mx-auto space-y-4">
+            <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-100 text-xs text-blue-900 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-700 shrink-0" />
+              <span>নিরাপত্তা নিশ্চিত করতে ছাত্র আইডি এবং অভিভাবকের মোবাইল নম্বর উভয়টি দিন।</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">ছাত্র আইডি নম্বর *</label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={studentIdInput}
+                    onChange={(e) => setStudentIdInput(e.target.value)}
+                    placeholder="যেমন: DA-2026-101"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">অভিভাবকের মোবাইল নম্বর *</label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="text"
+                    required
+                    value={guardianPhoneInput}
+                    onChange={(e) => setGuardianPhoneInput(e.target.value)}
+                    placeholder="যেমন: 01711223344"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {searchError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{searchError}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Search className="w-4 h-4" />
+              ফলাফল অনুসন্ধান করুন
+            </button>
+          </form>
+        )}
+
+        {/* Method 2: Class & Student List Browser */}
         {searchMethod === 'classRoll' && (
           <div className="space-y-4 pt-2">
             <div>
@@ -326,7 +539,11 @@ export const PublicResults: React.FC = () => {
                     <button
                       key={cls.id}
                       type="button"
-                      onClick={() => setSelectedClassId(cls.id)}
+                      onClick={() => {
+                        setSelectedClassId(cls.id);
+                        setSearchError(null);
+                        setNoResultsMessage(null);
+                      }}
                       className={`p-3 rounded-xl text-xs font-bold border text-left transition cursor-pointer flex items-center justify-between ${
                         isSelected
                           ? 'bg-blue-900 text-white border-blue-700 shadow-sm'
@@ -348,7 +565,7 @@ export const PublicResults: React.FC = () => {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                   <GraduationCap className="w-4 h-4 text-blue-700" />
-                  নির্বাচিত জামাতের শিক্ষার্থীদের তালিকা (ক্লিক করে মার্কশিট দেখুন):
+                  শিক্ষার্থীদের তালিকা (ক্লিক করে অভিভাবক ভেরিফিকেশনসহ মার্কশিট দেখুন):
                 </h3>
                 <span className="text-[11px] text-slate-400">মোট শিক্ষার্থী: {classStudents.length} জন</span>
               </div>
@@ -358,7 +575,11 @@ export const PublicResults: React.FC = () => {
                   {classStudents.map((st) => (
                     <div
                       key={st.id}
-                      onClick={() => handleSelectStudent(st)}
+                      onClick={() => {
+                        setSelectedStudentForVerification(st);
+                        setModalPhoneInput('');
+                        setModalError(null);
+                      }}
                       className="p-3 rounded-xl bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 transition cursor-pointer flex items-center justify-between group shadow-2xs"
                     >
                       <div className="flex items-center gap-2.5 overflow-hidden">
@@ -388,31 +609,65 @@ export const PublicResults: React.FC = () => {
           </div>
         )}
 
-        {/* Method 2: Search By Student ID */}
-        {searchMethod === 'id' && (
-          <form onSubmit={handleSearchById} className="pt-2 max-w-md mx-auto space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">ছাত্র আইডি নম্বর প্রদান করুন *</label>
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={studentIdInput}
-                  onChange={(e) => setStudentIdInput(e.target.value)}
-                  placeholder="যেমন: STU-1001"
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-blue-500"
-                />
+        {/* No Results Message - Strict Truthful display with no fake fabrication */}
+        {noResultsMessage && (
+          <div className="p-6 bg-amber-50 border border-amber-200 rounded-2xl text-center space-y-2">
+            <AlertCircle className="w-8 h-8 text-amber-600 mx-auto" />
+            <h4 className="font-bold text-amber-900 text-sm">ফলাফল প্রকাশিত হয়নি</h4>
+            <p className="text-xs text-amber-800 max-w-md mx-auto">{noResultsMessage}</p>
+          </div>
+        )}
+
+        {/* Multiple Exam Selection List (when student has multiple exams published) */}
+        {matchedResultsList.length > 1 && !searchedResult && (
+          <div className="border-t border-slate-200 pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  {verifiedStudent?.nameBangla}-এর প্রকাশিত পরীক্ষাসমূহ:
+                </h3>
+                <p className="text-xs text-slate-500">যেকোনো পরীক্ষার ওপর ক্লিক করে পূর্ণাঙ্গ নম্বরপত্র ও ফলাফল দেখুন</p>
               </div>
+              <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-lg">
+                মোট পরীক্ষা: {matchedResultsList.length}টি
+              </span>
             </div>
-            <button
-              type="submit"
-              className="w-full bg-blue-800 hover:bg-blue-900 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Search className="w-4 h-4" />
-              ফলাফল অনুসন্ধান করুন
-            </button>
-          </form>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {matchedResultsList.map((res) => (
+                <div
+                  key={res.id}
+                  onClick={() => setSearchedResult(res)}
+                  className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/30 border border-blue-200 hover:border-blue-400 hover:shadow-md transition cursor-pointer space-y-2 group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-blue-900 group-hover:text-blue-700">
+                      {res.examName}
+                    </span>
+                    <span className="text-xs font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md">
+                      গ্রেড: {res.overallGrade}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <span>প্রাপ্ত নম্বর: <strong className="text-slate-900">{res.totalMarksObtained}/{res.totalMarksPossible}</strong> ({res.percentage.toFixed(1)}%)</span>
+                    <span>GPA: <strong className="text-blue-800">{res.cgpa.toFixed(2)}</strong></span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-500">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" />
+                      {res.publishDate || '২০২৬'}
+                    </span>
+                    <span className="text-blue-700 font-bold flex items-center gap-1 group-hover:underline">
+                      মার্কশিট দেখুন <Eye className="w-3 h-3" />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -5,6 +5,7 @@ import {
   exportStudentsToExcel,
   exportResultsToExcel,
   exportFullMadrasaDataToExcel,
+  exportFinanceToExcel,
   parseStudentExcelFile,
 } from '../../utils/excelService';
 import {
@@ -52,6 +53,7 @@ export const AdminExcelGoogleDriveModal: React.FC<AdminExcelGoogleDriveModalProp
     feePayments,
     examResults,
     notices,
+    financialTransactions,
     addStudent,
     updateStudent,
     syncAllToCloud,
@@ -455,6 +457,26 @@ export const AdminExcelGoogleDriveModal: React.FC<AdminExcelGoogleDriveModalProp
                   </button>
                 </div>
 
+                {/* Export Finance Transactions */}
+                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col justify-between space-y-3 sm:col-span-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 font-bold text-slate-800 text-sm">
+                      <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                      <span>আয়-ব্যয় ও হিসাব বহির লেনদেন (Accounts & Finance)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      মোট {financialTransactions.length} টি জমা ও খরচ ভাউচার, ক্যাটাগরি, তারিখ ও পরিমাণ এক্সেল শিটে সংরক্ষণ করুন।
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => exportFinanceToExcel(financialTransactions)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer w-fit"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>হিসাব খাতা এক্সেল (.xlsx)</span>
+                  </button>
+                </div>
+
                 {/* Export Full Database */}
                 <div className="bg-teal-50 border border-teal-200 p-4 rounded-2xl sm:col-span-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="space-y-1">
@@ -463,7 +485,7 @@ export const AdminExcelGoogleDriveModal: React.FC<AdminExcelGoogleDriveModalProp
                       <span>সম্পূর্ণ মাদরাসা ডাটাবেস এক্সেল (Multi-Sheet Master Backup)</span>
                     </div>
                     <p className="text-[11px] text-teal-800">
-                      একক এক্সেল ফাইলের ভেতর আলাদা শিটে (Students, Teachers, Classes, Fees, Results, Notices) সংরক্ষিত হবে।
+                      একক এক্সেল ফাইলের ভেতর আলাদা শিটে (Students, Teachers, Classes, Fees, Results, Finance, Notices) সংরক্ষিত হবে।
                     </p>
                   </div>
                   <button
@@ -475,6 +497,7 @@ export const AdminExcelGoogleDriveModal: React.FC<AdminExcelGoogleDriveModalProp
                         feePayments,
                         examResults,
                         notices,
+                        financialTransactions,
                       })
                     }
                     className="bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold py-2.5 px-4 rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
